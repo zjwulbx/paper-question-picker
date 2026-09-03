@@ -867,6 +867,197 @@ tbody td:first-child {
   text-align: center;
 }
 
+.archive-section {
+  min-width: 0;
+}
+
+.archive-list {
+  display: grid;
+}
+
+.archive-item {
+  border-top: 1px solid var(--line);
+}
+
+.archive-item:first-child {
+  border-top: 0;
+}
+
+.archive-item.is-current {
+  background: rgba(229, 242, 235, 0.22);
+}
+
+.archive-overview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 11px;
+}
+
+.archive-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.archive-summary {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.archive-summary > strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-summary > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.archive-summary > span {
+  display: block;
+  margin-top: 2px;
+  color: #8a938f;
+  font-size: 10px;
+}
+
+.archive-status {
+  display: inline-flex;
+  min-height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--muted);
+  background: var(--paper-deep);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.archive-status.current,
+.archive-status.success {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.archive-actions {
+  display: flex;
+  gap: 7px;
+  padding: 0 20px 13px 68px;
+}
+
+.archive-details {
+  border-top: 1px solid rgba(226, 218, 205, 0.72);
+  background: rgba(240, 234, 223, 0.2);
+}
+
+.archive-details > summary {
+  padding: 11px 20px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.archive-details > summary:hover {
+  background: rgba(23, 59, 85, 0.035);
+}
+
+.archive-detail-body {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.6fr);
+  border-top: 1px solid var(--line);
+}
+
+.archive-detail-body h3 {
+  margin: 0 0 10px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.operation-panel {
+  border-right: 1px solid var(--line);
+  padding: 16px 18px;
+}
+
+.operation-list {
+  display: grid;
+  max-height: 300px;
+  gap: 10px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-list li {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid rgba(47, 128, 110, 0.3);
+  padding-left: 9px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.operation-list time,
+.empty-operation {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.empty-operation {
+  margin: 0;
+}
+
+.archive-results-panel {
+  min-width: 0;
+  padding: 16px 0 0;
+}
+
+.archive-results-panel > h3 {
+  padding: 0 18px;
+}
+
+.archive-table {
+  border-top: 1px solid var(--line);
+}
+
+.archive-table table {
+  min-width: 540px;
+}
+
+.empty-archive-results {
+  border-top: 1px solid var(--line);
+  padding: 22px 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.archive-note {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 10px 20px;
+  color: var(--muted);
+  background: rgba(240, 234, 223, 0.34);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
 .stats-section {
   padding-bottom: 18px;
 }
@@ -1120,6 +1311,19 @@ tbody td:first-child {
     text-align: left;
   }
 
+  .archive-overview {
+    align-items: flex-start;
+  }
+
+  .archive-detail-body {
+    grid-template-columns: 1fr;
+  }
+
+  .operation-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
   table {
     min-width: 560px;
   }
@@ -1159,6 +1363,34 @@ tbody td:first-child {
 
   .principle {
     margin-inline: 16px;
+  }
+
+  .archive-overview {
+    flex-wrap: wrap;
+    padding-inline: 16px;
+  }
+
+  .archive-summary {
+    width: calc(100% - 48px);
+    flex-basis: calc(100% - 48px);
+  }
+
+  .archive-status {
+    margin-left: 48px;
+  }
+
+  .archive-actions {
+    padding: 0 16px 13px 64px;
+  }
+
+  .archive-actions .button {
+    flex: 1 1 0;
+    padding-inline: 8px;
+  }
+
+  .archive-note,
+  .archive-details > summary {
+    padding-inline: 16px;
   }
 }
 

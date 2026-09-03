@@ -2,7 +2,9 @@
   "use strict";
 
   const Core = globalThis.LotteryCore;
+  const History = globalThis.HistoryCore;
   const STORAGE_KEY = "paper-question-picker-web-v1";
+  const HISTORY_STORAGE_KEY = "paper-question-picker-history-v1";
   const EXAMPLE_STUDENTS = [
     "陈晨", "林一凡", "周子涵", "宋雨桐", "许嘉宁", "赵可心",
     "王启明", "李思远", "张若琳", "吴安然", "郑书言", "何清越",
@@ -33,6 +35,9 @@
     resetTop: document.querySelector("#reset-top"),
     saveNote: document.querySelector("#save-note"),
     stage: document.querySelector("#stage"),
+    archiveSection: document.querySelector("#archive-section"),
+    archiveCount: document.querySelector("#archive-count"),
+    archiveList: document.querySelector("#archive-list"),
     historySection: document.querySelector("#history-section"),
     historyContent: document.querySelector("#history-content"),
     statsSection: document.querySelector("#stats-section"),
@@ -52,6 +57,8 @@
     activeWeek: 0,
     revealing: null,
     timer: null,
+    sessionId: null,
+    archives: [],
   };
 
   function parseLines(value) {
@@ -112,10 +119,95 @@
         paperText: elements.papersInput.value,
         schedule: state.schedule,
         activeWeek: state.activeWeek,
+        sessionId: state.sessionId,
       }));
+      return true;
     } catch (_error) {
       setStatus("系统无法保存本地进度；本次打开期间仍可正常使用。");
+      return false;
     }
+  }
+
+  function currentSnapshot() {
+    return {
+      studentText: elements.studentsInput.value,
+      paperText: elements.papersInput.value,
+      schedule: state.schedule,
+      activeWeek: state.activeWeek,
+    };
+  }
+
+  function readArchivesFromStorage() {
+    try {
+      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) return [];
+      return History.normalizeSessions(JSON.parse(raw), Core.verifySchedule);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function loadArchives() {
+    try {
+      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) return;
+      state.archives = History.normalizeSessions(JSON.parse(raw), Core.verifySchedule);
+    } catch (_error) {
+      state.archives = [];
+      setStatus("部分历史存档无法读取，当前抽签进度未受影响。");
+    }
+  }
+
+  function persistArchives(candidateSessions) {
+    const normalized = History.normalizeSessions(candidateSessions, Core.verifySchedule);
+    let sessionsToSave = normalized.slice();
+    while (sessionsToSave.length) {
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify({
+          schemaVersion: History.SCHEMA_VERSION,
+          sessions: sessionsToSave,
+        }));
+        state.archives = sessionsToSave;
+        if (sessionsToSave.length < normalized.length) {
+          setStatus("浏览器存储空间有限，已保留最近 " + sessionsToSave.length + " 次历史存档。");
+        }
+        return true;
+      } catch (_error) {
+        if (sessionsToSave.length === 1) return false;
+        sessionsToSave = sessionsToSave.slice(0, -1);
+      }
+    }
+    return false;
+  }
+
+  function recordHistory(type, description) {
+    if (!state.schedule) return false;
+    try {
+      const merged = History.mergeSessions(state.archives, readArchivesFromStorage(), Core.verifySchedule);
+      const update = History.upsertSession(merged, currentSnapshot(), type && description ? {
+        type: type,
+        description: description,
+      } : null, Core.verifySchedule, { sessionId: state.sessionId });
+      if (!persistArchives(update.sessions)) {
+        setStatus("历史存档写入失败，请先导出当前结果或释放浏览器存储空间。");
+        return false;
+      }
+      state.sessionId = update.sessionId;
+      return true;
+    } catch (_error) {
+      setStatus("历史存档写入失败，当前抽签进度仍然保留。");
+      return false;
+    }
+  }
+
+  function ensureCurrentArchive() {
+    if (!state.schedule) return;
+    const hasSession = Boolean(state.sessionId && state.archives.some(function sameSession(session) {
+      return session.id === state.sessionId;
+    }));
+    if (!hasSession) state.sessionId = null;
+    const description = hasSession ? null : "已自动保存原有抽签进度";
+    if (recordHistory(description ? "migrate" : null, description)) saveState();
   }
 
   function loadState() {
@@ -140,8 +232,9 @@
       state.activeWeek = Number.isFinite(restoredWeek)
         ? Math.min(Math.max(Math.floor(restoredWeek), 0), saved.schedule.weeks.length - 1)
         : 0;
+      state.sessionId = typeof saved.sessionId === "string" ? saved.sessionId : null;
     } catch (_error) {
-      try { localStorage.removeItem(STORAGE_KEY); } catch (_ignored) { /* Storage unavailable. */ }
+      setStatus("之前保存的当前进度无法读取，但历史存档仍可单独恢复。");
     }
   }
 
@@ -194,18 +287,7 @@
   }
 
   function getVisibleRows() {
-    if (!state.schedule) return [];
-    const names = getNameMap();
-    return state.schedule.weeks.flatMap(function rowsForWeek(week, weekIndex) {
-      return week.assignments.flatMap(function rowForPaper(assignment, paperIndex) {
-        if (!week.revealed[paperIndex]) return [];
-        return [{
-          week: weekIndex + 1,
-          paper: assignment.paper,
-          names: assignment.studentIds.map(function studentName(id) { return names[id]; }),
-        }];
-      });
-    });
+    return state.schedule ? History.getVisibleRows(state.schedule) : [];
   }
 
   function firstIncompleteWeek() {
@@ -328,6 +410,87 @@
     }).join("")}</tbody></table></div>`;
   }
 
+  function formatArchiveTime(value, compact) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "时间未知";
+    return new Intl.DateTimeFormat("zh-CN", compact ? {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    } : {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  function archiveResultsHtml(rows) {
+    if (!rows.length) {
+      return '<div class="empty-archive-results">尚未揭晓论文，因此没有可显示的学生结果。</div>';
+    }
+    return `<div class="table-scroll archive-table"><table><thead><tr><th>周次</th><th>论文</th><th>提问学生</th></tr></thead><tbody>${rows.map(function archiveRow(row) {
+      return `<tr><td>第 ${row.week} 周</td><td><strong>${escapeHtml(row.paper)}</strong></td><td><div class="name-tags">${row.names.map(function archiveName(name) {
+        return `<span>${escapeHtml(name)}</span>`;
+      }).join("")}</div></td></tr>`;
+    }).join("")}</tbody></table></div>`;
+  }
+
+  function renderArchives() {
+    const archives = state.archives;
+    elements.archiveSection.hidden = archives.length === 0;
+    elements.archiveCount.textContent = archives.length + " 次";
+    if (!archives.length) {
+      elements.archiveList.innerHTML = "";
+      return;
+    }
+
+    elements.archiveList.innerHTML = archives.map(function archiveCard(session) {
+      const rows = History.getVisibleRows(session.schedule);
+      const totalPapers = session.schedule.students.length;
+      const revealedPapers = rows.length;
+      const isCurrent = Boolean(state.schedule && state.sessionId === session.id);
+      const complete = revealedPapers === totalPapers;
+      const operations = session.operations.slice().reverse();
+      const statusClass = complete ? "success" : isCurrent ? "current" : "neutral";
+      const statusText = complete ? "✓ 已完成" : isCurrent ? "● 当前进度" : "可恢复";
+      return `<article class="archive-item ${isCurrent ? "is-current" : ""}">
+        <div class="archive-overview">
+          <div class="archive-mark" aria-hidden="true">${complete ? "✓" : "↶"}</div>
+          <div class="archive-summary">
+            <strong>${escapeHtml(formatArchiveTime(session.createdAt, false))} 的抽签</strong>
+            <p>${totalPapers} 名学生 · ${totalPapers} 篇论文 · 已揭晓 ${revealedPapers}/${totalPapers} 篇</p>
+            <span>最后操作：${escapeHtml(formatArchiveTime(session.updatedAt, true))}</span>
+          </div>
+          <span class="archive-status ${statusClass}">${statusText}</span>
+        </div>
+        <div class="archive-actions">
+          <button class="button outline small" type="button" data-archive-action="restore" data-session-id="${session.id}" ${isCurrent ? "disabled" : ""}>${isCurrent ? "正在使用" : "恢复此进度"}</button>
+          <button class="button outline small" type="button" data-archive-action="export" data-session-id="${session.id}" ${rows.length ? "" : "disabled"}>导出结果</button>
+        </div>
+        <details class="archive-details">
+          <summary>查看操作记录与已揭晓结果</summary>
+          <div class="archive-detail-body">
+            <section class="operation-panel">
+              <h3>操作记录</h3>
+              ${operations.length ? `<ol class="operation-list">${operations.map(function operationItem(operation) {
+                return `<li><time>${escapeHtml(formatArchiveTime(operation.at, true))}</time><span>${escapeHtml(operation.description)}</span></li>`;
+              }).join("")}</ol>` : '<p class="empty-operation">暂无操作记录。</p>'}
+            </section>
+            <section class="archive-results-panel">
+              <h3>已揭晓结果</h3>
+              ${archiveResultsHtml(rows)}
+            </section>
+          </div>
+        </details>
+      </article>`;
+    }).join("");
+  }
+
   function renderStats() {
     if (!state.schedule) {
       elements.statsSection.hidden = true;
@@ -356,6 +519,7 @@
     setLocked(Boolean(state.schedule));
     refreshInputs();
     renderStage();
+    renderArchives();
     renderHistory();
     renderStats();
   }
@@ -374,7 +538,11 @@
       try {
         state.schedule = Core.createSchedule(result.students, result.papers);
         state.activeWeek = 0;
-        setStatus("安排已生成：" + state.schedule.weeks.length + " 周，每人最终恰好 3 次。");
+        state.sessionId = null;
+        const savedToHistory = recordHistory("generate", "生成完整抽签安排");
+        setStatus(savedToHistory
+          ? "安排已生成并存入历史：" + state.schedule.weeks.length + " 周，每人最终恰好 3 次。"
+          : "安排已生成，但历史存档暂时无法写入；当前进度仍会单独保存。");
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "生成失败，请检查输入。");
       }
@@ -406,7 +574,14 @@
       updateRevealed([paperIndex]);
       state.revealing = null;
       state.timer = null;
-      setStatus("抽取完成：" + assignment.studentIds.map(function name(id) { return names[id]; }).join("、") + "。");
+      const selectedNames = assignment.studentIds.map(function name(id) { return names[id]; });
+      const savedToHistory = recordHistory(
+        "reveal-paper",
+        "揭晓《" + assignment.paper + "》：" + selectedNames.join("、"),
+      );
+      setStatus(savedToHistory
+        ? "抽取完成并已记录：" + selectedNames.join("、") + "。"
+        : "抽取完成：" + selectedNames.join("、") + "。当前进度已保留，但历史记录写入失败。");
       renderAll();
       saveState();
     }, 900);
@@ -423,7 +598,14 @@
       updateRevealed(pending);
       state.revealing = null;
       state.timer = null;
-      setStatus("第 " + (state.activeWeek + 1) + " 周已全部揭晓，9 位同学互不重复。");
+      const weekNumber = state.activeWeek + 1;
+      const savedToHistory = recordHistory(
+        "reveal-week",
+        "批量揭晓第 " + weekNumber + " 周剩余 " + pending.length + " 篇论文",
+      );
+      setStatus(savedToHistory
+        ? "第 " + weekNumber + " 周已全部揭晓并记录，9 位同学互不重复。"
+        : "第 " + weekNumber + " 周已全部揭晓；当前进度已保留，但历史记录写入失败。");
       renderAll();
       saveState();
     }, 900);
@@ -431,12 +613,17 @@
 
   function resetResults() {
     if (!state.schedule || state.revealing) return;
-    if (!window.confirm("确定清除当前抽签结果吗？学生和论文名单会保留。")) return;
+    if (!window.confirm("确定重新开始吗？当前完整进度会先保存到历史存档，学生和论文名单会保留。")) return;
+    if (!recordHistory("reset", "重新开始前自动保存当前进度")) {
+      setStatus("为避免丢失数据，本次重置已取消。请先释放浏览器存储空间后再试。");
+      return;
+    }
     if (state.timer) window.clearTimeout(state.timer);
     state.schedule = null;
     state.activeWeek = 0;
     state.revealing = null;
-    setStatus("结果已清除，可以调整名单后重新生成。");
+    state.sessionId = null;
+    setStatus("已重新开始；刚才的完整进度仍在“历史存档”中，可随时恢复。");
     renderAll();
     saveState();
   }
@@ -457,7 +644,9 @@
   }
 
   function quoteCsv(value) {
-    return '"' + String(value).replaceAll('"', '""') + '"';
+    const text = String(value);
+    const safeText = /^[=+\-@\t\r]/.test(text) ? "'" + text : text;
+    return '"' + safeText.replaceAll('"', '""') + '"';
   }
 
   async function copyResults() {
@@ -474,8 +663,7 @@
     }
   }
 
-  function exportCsv() {
-    const rows = getVisibleRows();
+  function exportRowsCsv(rows, filename) {
     if (!rows.length) return;
     const data = [
       ["周次", "论文", "提问学生 1", "提问学生 2", "提问学生 3"],
@@ -487,10 +675,52 @@
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "论文提问抽签结果.csv";
+    anchor.download = filename;
     anchor.click();
     window.setTimeout(function cleanUrl() { URL.revokeObjectURL(url); }, 1000);
     setStatus("已导出 " + rows.length + " 篇论文的结果。");
+  }
+
+  function exportCsv() {
+    exportRowsCsv(getVisibleRows(), "论文提问抽签结果.csv");
+  }
+
+  function exportArchiveCsv(sessionId) {
+    const session = state.archives.find(function findSession(item) { return item.id === sessionId; });
+    if (!session) return;
+    const dateLabel = session.createdAt.slice(0, 10);
+    exportRowsCsv(History.getVisibleRows(session.schedule), "论文提问抽签历史-" + dateLabel + ".csv");
+  }
+
+  function restoreArchive(sessionId) {
+    const selected = state.archives.find(function findSession(item) { return item.id === sessionId; });
+    if (!selected || !Core.verifySchedule(selected.schedule) || state.revealing) return;
+    if (state.schedule && state.sessionId === selected.id) return;
+    if (!window.confirm("确定恢复 " + formatArchiveTime(selected.createdAt, false) + " 的抽签进度吗？当前界面内容会被替换。")) return;
+
+    if (state.schedule && !recordHistory("archive", "恢复其他存档前自动保存当前进度")) {
+      setStatus("为避免覆盖当前数据，恢复操作已取消。请先释放浏览器存储空间后再试。");
+      return;
+    }
+
+    if (state.timer) window.clearTimeout(state.timer);
+    elements.studentsInput.value = selected.studentText;
+    elements.papersInput.value = selected.paperText;
+    state.schedule = History.clone(selected.schedule);
+    state.activeWeek = selected.activeWeek;
+    state.revealing = null;
+    state.timer = null;
+    state.sessionId = selected.id;
+    const restoredInHistory = recordHistory(
+      "restore",
+      "从 " + formatArchiveTime(selected.createdAt, false) + " 的存档恢复进度",
+    );
+    setStatus(restoredInHistory
+      ? "历史进度已恢复，可以从原来的位置继续抽签。"
+      : "历史进度已恢复；当前进度会继续单独保存在本机。");
+    renderAll();
+    saveState();
+    elements.stage.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   elements.studentsInput.addEventListener("input", refreshInputs);
@@ -502,6 +732,12 @@
   elements.clearButton.addEventListener("click", clearInputs);
   elements.copyButton.addEventListener("click", copyResults);
   elements.exportButton.addEventListener("click", exportCsv);
+  elements.archiveList.addEventListener("click", function archiveClick(event) {
+    const button = event.target.closest("button[data-archive-action]");
+    if (!button || button.disabled) return;
+    if (button.dataset.archiveAction === "restore") restoreArchive(button.dataset.sessionId);
+    if (button.dataset.archiveAction === "export") exportArchiveCsv(button.dataset.sessionId);
+  });
   elements.stage.addEventListener("click", function stageClick(event) {
     const button = event.target.closest("button");
     if (!button || button.disabled) return;
@@ -524,6 +760,15 @@
     }
   });
 
+  window.addEventListener("storage", function syncHistoryAcrossTabs(event) {
+    if (event.key !== HISTORY_STORAGE_KEY) return;
+    state.archives = History.mergeSessions(state.archives, readArchivesFromStorage(), Core.verifySchedule);
+    renderArchives();
+    setStatus("另一窗口更新了历史存档，本页已同步显示。");
+  });
+
+  loadArchives();
   loadState();
+  ensureCurrentArchive();
   renderAll();
 })();

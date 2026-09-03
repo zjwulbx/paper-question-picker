@@ -21,7 +21,7 @@
     <meta property="og:image" content="https://zjwulbx.github.io/paper-question-picker/og.png" />
     <title>论文提问抽签</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=2" />
   </head>
   <body>
     <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -111,10 +111,22 @@
         <div class="content-column">
           <section id="stage" aria-label="抽签舞台"></section>
 
+          <section id="archive-section" class="card archive-section" hidden>
+            <div class="section-head">
+              <div>
+                <h2><span aria-hidden="true">↶</span> 历史存档</h2>
+                <p>重置后仍可查看和恢复；自动保留最近 20 次完整抽签</p>
+              </div>
+              <span id="archive-count" class="badge neutral">0 次</span>
+            </div>
+            <div id="archive-list" class="archive-list"></div>
+            <p class="archive-note">历史只保存在当前浏览器中；更换设备或清除浏览器数据后不会同步。</p>
+          </section>
+
           <section id="history-section" class="card data-section" hidden>
             <div class="section-head">
               <div>
-                <h2><span aria-hidden="true">▤</span> 抽签记录</h2>
+                <h2><span aria-hidden="true">▤</span> 本次抽签结果</h2>
                 <p>只显示已揭晓的论文结果</p>
               </div>
               <div class="section-actions">
@@ -147,7 +159,8 @@
       </section>
     </main>
 
-    <script src="lottery-core.js"></script>
-    <script src="app.js"></script>
+    <script src="lottery-core.js?v=2"></script>
+    <script src="history-core.js?v=2"></script>
+    <script src="app.js?v=2"></script>
   </body>
 </html>
