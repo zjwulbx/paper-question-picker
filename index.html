@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="为课堂论文讨论生成每周不重复、全程次数均衡的提问安排。"
+    />
+    <meta name="theme-color" content="#173b55" />
+    <meta property="og:title" content="论文提问抽签" />
+    <meta
+      property="og:description"
+      content="每周三篇论文、每篇三人，同周不重复，全程次数均衡。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://zjwulbx.github.io/paper-question-picker/og.png" />
+    <title>论文提问抽签</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">⚄</span>
+          <div>
+            <div class="brand-title">论文提问抽签</div>
+            <div class="brand-subtitle">公平、随机、每周不重复</div>
+          </div>
+        </div>
+        <button id="reset-top" class="button ghost" type="button" disabled aria-label="重新开始抽签">
+          <span aria-hidden="true">↻</span><span>重新开始</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <div class="eyebrow"><span aria-hidden="true">✦</span> 最低次数优先 · 同层随机</div>
+          <h1 id="hero-title">愿每一次讨论，都能带来新的启发与收获</h1>
+          <p>每周三篇论文、每篇三人。同一周 9 人不重复，课程结束时每位学生恰好被抽中三次。</p>
+        </div>
+        <div class="metrics" aria-label="课程概况">
+          <div class="metric">
+            <span class="metric-label">学生</span>
+            <strong id="metric-students">12</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">论文</span>
+            <strong id="metric-papers">12</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">周课程</span>
+            <strong id="metric-weeks">4</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="card settings-card">
+          <div class="card-head">
+            <div>
+              <h2>课程设置</h2>
+              <p id="settings-subtitle">每行输入一位学生和一篇论文</p>
+            </div>
+            <span id="settings-badge" class="badge success">✓ 可开始</span>
+          </div>
+          <div class="card-body settings-body">
+            <div class="field">
+              <div class="field-head">
+                <label for="students-input">学生名单</label>
+                <span id="student-count">12 人</span>
+              </div>
+              <textarea id="students-input" rows="9" spellcheck="false"></textarea>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
+                <label for="papers-input">论文列表</label>
+                <span id="paper-count">12 篇</span>
+              </div>
+              <textarea id="papers-input" rows="7" spellcheck="false"></textarea>
+            </div>
+
+            <div id="validation-box" class="validation" role="alert" hidden></div>
+
+            <button id="generate-button" class="button primary wide" type="button">
+              <span aria-hidden="true">⚄</span> 生成完整抽签
+            </button>
+            <button id="edit-button" class="button outline wide" type="button" hidden>
+              <span aria-hidden="true">↻</span> 修改名单并重新生成
+            </button>
+
+            <div id="input-actions" class="minor-actions">
+              <button id="example-button" class="button text" type="button">载入示例</button>
+              <span aria-hidden="true">·</span>
+              <button id="clear-button" class="button text muted" type="button">清空</button>
+            </div>
+            <p id="save-note" class="save-note">系统先生成全程安排，确保后续不会出现无解。</p>
+          </div>
+        </aside>
+
+        <div class="content-column">
+          <section id="stage" aria-label="抽签舞台"></section>
+
+          <section id="history-section" class="card data-section" hidden>
+            <div class="section-head">
+              <div>
+                <h2><span aria-hidden="true">▤</span> 抽签记录</h2>
+                <p>只显示已揭晓的论文结果</p>
+              </div>
+              <div class="section-actions">
+                <button id="copy-button" class="button outline small" type="button" disabled>复制</button>
+                <button id="export-button" class="button outline small" type="button" disabled>导出 CSV</button>
+              </div>
+            </div>
+            <div id="history-content"></div>
+          </section>
+
+          <section id="stats-section" class="card stats-section" hidden>
+            <div class="section-head">
+              <div>
+                <h2><span aria-hidden="true">◎</span> 公平性统计</h2>
+                <p>累计次数按已揭晓结果计算，最高不超过 3 次</p>
+              </div>
+              <div class="progress-copy">
+                <strong id="course-progress-count">0 / 12 篇</strong>
+                <span id="course-progress-percent">全课程 0%</span>
+              </div>
+            </div>
+            <div class="progress-track" aria-hidden="true"><span id="course-progress-bar"></span></div>
+            <div id="stats-grid" class="stats-grid"></div>
+          </section>
+
+          <div id="visible-status" class="status-note" hidden>
+            <span aria-hidden="true">✓</span><span id="visible-status-text"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="lottery-core.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
