@@ -5,6 +5,7 @@
   const History = globalThis.HistoryCore;
   const STORAGE_KEY = "paper-question-picker-web-v1";
   const HISTORY_STORAGE_KEY = "paper-question-picker-history-v1";
+  const MAX_BACKUP_FILE_BYTES = 8 * 1024 * 1024;
   const EXAMPLE_STUDENTS = [
     "陈晨", "林一凡", "周子涵", "宋雨桐", "许嘉宁", "赵可心",
     "王启明", "李思远", "张若琳", "吴安然", "郑书言", "何清越",
@@ -38,6 +39,9 @@
     archiveSection: document.querySelector("#archive-section"),
     archiveCount: document.querySelector("#archive-count"),
     archiveList: document.querySelector("#archive-list"),
+    backupExportButton: document.querySelector("#backup-export-button"),
+    backupImportButton: document.querySelector("#backup-import-button"),
+    backupFileInput: document.querySelector("#backup-file-input"),
     historySection: document.querySelector("#history-section"),
     historyContent: document.querySelector("#history-content"),
     statsSection: document.querySelector("#stats-section"),
@@ -134,6 +138,7 @@
       paperText: elements.papersInput.value,
       schedule: state.schedule,
       activeWeek: state.activeWeek,
+      sessionId: state.sessionId,
     };
   }
 
@@ -247,6 +252,8 @@
     elements.metricWeeks.textContent = result.students.length >= 3 && result.students.length % 3 === 0
       ? result.students.length / 3
       : "—";
+    elements.backupExportButton.disabled = state.archives.length === 0 && !state.schedule &&
+      !elements.studentsInput.value.trim() && !elements.papersInput.value.trim();
 
     if (!state.schedule) {
       const valid = result.errors.length === 0;
@@ -442,10 +449,12 @@
 
   function renderArchives() {
     const archives = state.archives;
-    elements.archiveSection.hidden = archives.length === 0;
+    elements.archiveSection.hidden = false;
     elements.archiveCount.textContent = archives.length + " 次";
+    const hasDraft = Boolean(elements.studentsInput.value.trim() || elements.papersInput.value.trim());
+    elements.backupExportButton.disabled = archives.length === 0 && !state.schedule && !hasDraft;
     if (!archives.length) {
-      elements.archiveList.innerHTML = "";
+      elements.archiveList.innerHTML = '<div class="empty-records">还没有历史存档。生成抽签后会自动记录，也可以导入以前下载的完整备份。</div>';
       return;
     }
 
@@ -692,6 +701,279 @@
     exportRowsCsv(History.getVisibleRows(session.schedule), "论文提问抽签历史-" + dateLabel + ".csv");
   }
 
+  function formatBackupFilename(date) {
+    function twoDigits(value) { return String(value).padStart(2, "0"); }
+    return "论文提问抽签完整备份-" + date.getFullYear() + "-" +
+      twoDigits(date.getMonth() + 1) + "-" + twoDigits(date.getDate()) + "-" +
+      twoDigits(date.getHours()) + twoDigits(date.getMinutes()) + ".json";
+  }
+
+  function downloadCompleteBackup() {
+    try {
+      const archives = History.mergeSessions(
+        state.archives,
+        readArchivesFromStorage(),
+        Core.verifySchedule,
+        new Date().toISOString(),
+        Infinity,
+      );
+      const snapshot = currentSnapshot();
+      const matchingSession = snapshot.sessionId && archives.find(function findCurrent(session) {
+        return session.id === snapshot.sessionId &&
+          (!snapshot.schedule || History.sameSchedulePlan(session.schedule, snapshot.schedule));
+      });
+      if (!matchingSession) snapshot.sessionId = null;
+
+      const now = new Date();
+      const backup = History.createBackup(snapshot, archives, Core.verifySchedule, now.toISOString());
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = formatBackupFilename(now);
+      anchor.click();
+      window.setTimeout(function cleanBackupUrl() { URL.revokeObjectURL(url); }, 1000);
+      setStatus("完整备份已下载，包含当前进度和 " + archives.length + " 次历史存档。请勿公开分享备份文件。");
+    } catch (_error) {
+      setStatus("完整备份生成失败，请刷新页面后重试；当前本机数据不会被更改。");
+    }
+  }
+
+  function readStoredHistoryStrict() {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_error) {
+      throw new Error("本机历史存档已经损坏；为避免覆盖数据，本次导入已取消。");
+    }
+    try {
+      return History.parseHistoryPayload(parsed, Core.verifySchedule);
+    } catch (_error) {
+      throw new Error("本机历史存档已经损坏；为避免覆盖数据，本次导入已取消。");
+    }
+  }
+
+  function restoreStoredValue(key, rawValue) {
+    if (rawValue === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, rawValue);
+  }
+
+  function commitImportedStorage(nextArchives, nextCurrent) {
+    let previousHistory;
+    let previousCurrent;
+    let wroteHistory = false;
+    let wroteCurrent = false;
+    try {
+      previousHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
+      previousCurrent = localStorage.getItem(STORAGE_KEY);
+    } catch (_error) {
+      return { ok: false, rollbackOk: true };
+    }
+
+    try {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify({
+        schemaVersion: History.SCHEMA_VERSION,
+        sessions: nextArchives,
+      }));
+      wroteHistory = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextCurrent));
+      wroteCurrent = true;
+      return { ok: true, rollbackOk: true };
+    } catch (_error) {
+      let rollbackOk = true;
+      try {
+        if (wroteHistory) restoreStoredValue(HISTORY_STORAGE_KEY, previousHistory);
+        if (wroteCurrent) restoreStoredValue(STORAGE_KEY, previousCurrent);
+      } catch (_rollbackError) {
+        rollbackOk = false;
+      }
+      return { ok: false, rollbackOk: rollbackOk };
+    }
+  }
+
+  function currentStatesEqual(left, right) {
+    if (!left || !right || Boolean(left.schedule) !== Boolean(right.schedule)) return false;
+    if (left.studentText !== right.studentText || left.paperText !== right.paperText) return false;
+    if (!left.schedule) return true;
+    return left.activeWeek === right.activeWeek &&
+      JSON.stringify(left.schedule) === JSON.stringify(right.schedule);
+  }
+
+  function importImpactDescription(importedCurrent, localCurrent) {
+    if (importedCurrent.schedule) {
+      return localCurrent.schedule
+        ? "备份中的当前抽签会替换本页；本页当前进度会先另存为一条历史。"
+        : "备份中的当前抽签会恢复到本页。";
+    }
+    if (localCurrent.schedule) {
+      return "备份没有进行中的抽签，本页当前进度会保留，只合并历史存档。";
+    }
+    return "备份中的学生和论文名单会恢复到本页。";
+  }
+
+  async function importCompleteBackup(event) {
+    const file = event && event.target && event.target.files
+      ? event.target.files[0]
+      : elements.backupFileInput.files && elements.backupFileInput.files[0];
+    if (!file) return;
+    elements.backupImportButton.disabled = true;
+
+    try {
+      if (state.revealing) throw new Error("正在抽取，请等待本次结果揭晓后再导入备份。");
+      if (typeof file.size === "number" && file.size > MAX_BACKUP_FILE_BYTES) {
+        throw new Error("备份文件超过 8 MB，未导入任何内容。");
+      }
+
+      const source = (await file.text()).replace(/^\uFEFF/, "");
+      let candidate;
+      try {
+        candidate = JSON.parse(source);
+      } catch (_error) {
+        throw new Error("备份文件不是有效的 JSON，未导入任何内容。");
+      }
+      const imported = History.parseBackup(candidate, Core.verifySchedule);
+      const stored = readStoredHistoryStrict();
+      const localArchives = History.mergeSessions(
+        state.archives,
+        stored,
+        Core.verifySchedule,
+        new Date().toISOString(),
+        Infinity,
+      );
+
+      imported.sessions.forEach(function detectIdConflict(incoming) {
+        const existing = localArchives.find(function sameId(session) { return session.id === incoming.id; });
+        if (existing && !History.sameSchedulePlan(existing.schedule, incoming.schedule)) {
+          throw new Error("备份与本机存在编号相同但内容不同的历史存档，未导入任何内容。");
+        }
+      });
+
+      const localCurrent = currentSnapshot();
+      const confirmation = "准备导入 " + formatArchiveTime(imported.exportedAt, false) +
+        " 导出的完整备份，共 " + imported.sessions.length + " 次历史存档。\n\n" +
+        importImpactDescription(imported.current, localCurrent) +
+        "\n历史会与本机记录合并，整个过程不会上传网络。\n\n确定继续吗？";
+      if (!window.confirm(confirmation)) {
+        setStatus("已取消导入，本机数据没有变化。");
+        return;
+      }
+
+      const latestKnownTimestamp = Math.max(
+        Date.now(),
+        Date.parse(imported.exportedAt),
+        imported.current.schedule ? Date.parse(imported.current.schedule.createdAt) : 0,
+        localCurrent.schedule ? Date.parse(localCurrent.schedule.createdAt) : 0,
+        localArchives.reduce(function latestHistoryTime(latest, session) {
+          return Math.max(latest, Date.parse(session.updatedAt));
+        }, 0),
+      );
+      const now = new Date(latestKnownTimestamp).toISOString();
+      let nextArchives = History.mergeSessions(
+        localArchives,
+        imported.sessions,
+        Core.verifySchedule,
+        now,
+        Infinity,
+      );
+      let nextCurrent = {
+        studentText: localCurrent.studentText,
+        paperText: localCurrent.paperText,
+        schedule: localCurrent.schedule ? History.clone(localCurrent.schedule) : null,
+        activeWeek: localCurrent.activeWeek,
+        sessionId: localCurrent.sessionId,
+      };
+
+      if (imported.current.schedule) {
+        if (localCurrent.schedule && !currentStatesEqual(localCurrent, imported.current)) {
+          const preserved = History.upsertSession(nextArchives, localCurrent, {
+            type: "archive",
+            description: "导入完整备份前自动保存当前进度",
+          }, Core.verifySchedule, {
+            sessionId: null,
+            now: now,
+            limit: Infinity,
+          });
+          nextArchives = preserved.sessions;
+        }
+
+        const restored = History.upsertSession(nextArchives, imported.current, {
+          type: "import-backup",
+          description: "从完整备份恢复当前进度",
+        }, Core.verifySchedule, {
+          sessionId: imported.current.sessionId,
+          now: now,
+          limit: Infinity,
+        });
+        nextArchives = restored.sessions;
+        nextCurrent = {
+          studentText: imported.current.studentText,
+          paperText: imported.current.paperText,
+          schedule: History.clone(imported.current.schedule),
+          activeWeek: imported.current.activeWeek,
+          sessionId: restored.sessionId,
+        };
+      } else if (!localCurrent.schedule) {
+        nextCurrent = {
+          studentText: imported.current.studentText,
+          paperText: imported.current.paperText,
+          schedule: null,
+          activeWeek: 0,
+          sessionId: null,
+        };
+      }
+
+      if (nextArchives.length > History.MAX_SESSIONS) {
+        const dropCount = nextArchives.length - History.MAX_SESSIONS;
+        if (!window.confirm(
+          "合并后共有 " + nextArchives.length + " 次历史，浏览器最多保留 20 次。\n\n" +
+          "继续将保留最近 20 次，并移除较早的 " + dropCount + " 次；取消则不作任何更改。",
+        )) {
+          setStatus("已取消导入，本机数据没有变化。");
+          return;
+        }
+        nextArchives = nextArchives.slice(0, History.MAX_SESSIONS);
+      }
+
+      if (nextCurrent.sessionId && !nextArchives.some(function currentStillSaved(session) {
+        return session.id === nextCurrent.sessionId;
+      })) {
+        nextCurrent.sessionId = null;
+      }
+
+      const committed = commitImportedStorage(nextArchives, nextCurrent);
+      if (!committed.ok) {
+        throw new Error(committed.rollbackOk
+          ? "备份导入失败，已恢复导入前的数据。"
+          : "浏览器写入失败，且无法确认是否完整回滚；请暂时不要关闭页面，并立即导出当前可见数据。"
+        );
+      }
+
+      if (state.timer) window.clearTimeout(state.timer);
+      elements.studentsInput.value = nextCurrent.studentText;
+      elements.papersInput.value = nextCurrent.paperText;
+      state.schedule = nextCurrent.schedule ? History.clone(nextCurrent.schedule) : null;
+      state.activeWeek = nextCurrent.activeWeek;
+      state.revealing = null;
+      state.timer = null;
+      state.sessionId = nextCurrent.sessionId;
+      state.archives = nextArchives;
+      renderAll();
+      const successDescription = imported.current.schedule
+        ? "当前进度已恢复"
+        : localCurrent.schedule
+          ? "历史已合并，本页当前进度保持不变"
+          : "学生和论文名单已恢复";
+      setStatus("完整备份导入成功：" + successDescription + "，共保留 " + nextArchives.length + " 次历史存档。");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "备份导入失败，未更改本机数据。");
+    } finally {
+      elements.backupFileInput.value = "";
+      elements.backupImportButton.disabled = false;
+    }
+  }
+
   function restoreArchive(sessionId) {
     const selected = state.archives.find(function findSession(item) { return item.id === sessionId; });
     if (!selected || !Core.verifySchedule(selected.schedule) || state.revealing) return;
@@ -732,6 +1014,15 @@
   elements.clearButton.addEventListener("click", clearInputs);
   elements.copyButton.addEventListener("click", copyResults);
   elements.exportButton.addEventListener("click", exportCsv);
+  elements.backupExportButton.addEventListener("click", downloadCompleteBackup);
+  elements.backupImportButton.addEventListener("click", function chooseBackupFile() {
+    if (state.revealing) {
+      setStatus("正在抽取，请等待本次结果揭晓后再导入备份。");
+      return;
+    }
+    elements.backupFileInput.click();
+  });
+  elements.backupFileInput.addEventListener("change", importCompleteBackup);
   elements.archiveList.addEventListener("click", function archiveClick(event) {
     const button = event.target.closest("button[data-archive-action]");
     if (!button || button.disabled) return;

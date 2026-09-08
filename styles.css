@@ -871,6 +871,18 @@ tbody td:first-child {
   min-width: 0;
 }
 
+.archive-head-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.archive-head-tools .section-actions {
+  flex-wrap: nowrap;
+}
+
 .archive-list {
   display: grid;
 }
@@ -1293,6 +1305,21 @@ tbody td:first-child {
   .stage-head > .button,
   .section-actions {
     width: 100%;
+  }
+
+  .archive-head-tools {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .archive-head-tools > .badge {
+    align-self: flex-start;
+  }
+
+  .archive-head-tools .section-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .section-actions > .button {
