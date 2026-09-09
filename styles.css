@@ -10,7 +10,7 @@
   --primary-hover: #214f6d;
   --line: #e2dacd;
   --line-strong: #cfc3b2;
-  --green: #2f806e;
+  --green: #276b5e;
   --green-soft: #e5f2eb;
   --gold: #bd812d;
   --gold-soft: #f5ead4;
@@ -83,8 +83,20 @@ button {
   padding: 13px 34px;
 }
 
+.topbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-verify-link {
+  text-decoration: none;
+}
+
 .brand {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 12px;
 }
@@ -425,6 +437,11 @@ textarea:disabled {
 .badge.neutral {
   color: var(--muted);
   background: var(--paper-deep);
+}
+
+.badge.pending {
+  color: #8a5b19;
+  background: var(--gold-soft);
 }
 
 .validation {
@@ -867,6 +884,298 @@ tbody td:first-child {
   text-align: center;
 }
 
+.commitment-section {
+  min-width: 0;
+  border-color: rgba(23, 59, 85, 0.2);
+}
+
+.commitment-head {
+  background: linear-gradient(135deg, rgba(23, 59, 85, 0.055), rgba(47, 128, 110, 0.035));
+}
+
+.commitment-body {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.commitment-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(47, 128, 110, 0.18);
+  border-radius: 13px;
+  padding: 13px 14px;
+  color: var(--green);
+  background: rgba(229, 242, 235, 0.52);
+}
+
+.commitment-notice-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.commitment-notice strong {
+  display: block;
+  font-size: 13px;
+}
+
+.commitment-notice p {
+  margin: 3px 0 0;
+  color: var(--green);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.commitment-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
+  gap: 12px;
+}
+
+.commitment-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 15px;
+  background: rgba(240, 234, 223, 0.25);
+}
+
+.commitment-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.commitment-panel h3,
+.audit-panel h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.visibility-chip {
+  display: inline-flex;
+  min-height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.visibility-chip.public {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.commitment-code,
+.commitment-input-summary,
+.audit-seed {
+  display: block;
+  width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(23, 59, 85, 0.12);
+  border-radius: 10px;
+  padding: 10px 11px;
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.72);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  user-select: all;
+}
+
+.commitment-code {
+  min-height: 58px;
+  font-weight: 700;
+}
+
+.commitment-input-summary {
+  min-height: 58px;
+}
+
+.commitment-panel > p {
+  margin: 9px 1px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.commitment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.commitment-actions #confirm-published-button {
+  min-width: 220px;
+  flex: 1 1 220px;
+  margin-left: auto;
+}
+
+.commitment-share-note {
+  margin: -7px 0 0;
+  border-left: 3px solid rgba(189, 129, 45, 0.52);
+  padding: 8px 11px;
+  color: var(--muted);
+  background: rgba(245, 234, 212, 0.34);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.commitment-share-note strong {
+  color: #80581e;
+}
+
+.verification-method {
+  border-top: 1px solid var(--line);
+  padding-top: 3px;
+}
+
+.verification-method > summary {
+  min-height: 40px;
+  padding: 10px 2px 6px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.verification-steps {
+  counter-reset: verification-step;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verification-steps li {
+  counter-increment: verification-step;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 10px;
+  background: rgba(240, 234, 223, 0.24);
+}
+
+.verification-steps li::before {
+  content: counter(verification-step);
+  display: grid;
+  width: 27px;
+  height: 27px;
+  grid-row: 1 / span 2;
+  place-items: center;
+  border-radius: 9px;
+  color: white;
+  background: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.verification-steps strong {
+  align-self: end;
+  font-size: 13px;
+}
+
+.verification-steps span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.protocol-link {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+.protocol-link a {
+  color: var(--primary);
+  font-weight: 750;
+}
+
+.commitment-limit,
+.legacy-compat {
+  margin: 11px 0 0;
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: var(--muted);
+  background: rgba(23, 59, 85, 0.04);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.commitment-limit {
+  border-left: 3px solid rgba(189, 129, 45, 0.58);
+  background: rgba(245, 234, 212, 0.38);
+}
+
+.commitment-limit strong,
+.legacy-compat strong {
+  color: var(--primary);
+}
+
+.audit-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(47, 128, 110, 0.22);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(229, 242, 235, 0.45);
+}
+
+.audit-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.audit-copy p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.audit-seed {
+  border-color: rgba(47, 128, 110, 0.18);
+  color: #236957;
+  background: rgba(255, 255, 255, 0.78);
+  font-weight: 700;
+}
+
+.audit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.audit-actions .button {
+  text-decoration: none;
+}
+
 .archive-section {
   min-width: 0;
 }
@@ -1066,8 +1375,29 @@ tbody td:first-child {
   padding: 10px 20px;
   color: var(--muted);
   background: rgba(240, 234, 223, 0.34);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.55;
+}
+
+.archive-note > span {
+  display: block;
+  margin-top: 3px;
+}
+
+.storage-origin-note {
+  margin: 0;
+  border-top: 1px solid rgba(189, 129, 45, 0.2);
+  padding: 10px 20px 13px;
+  color: #6f532d;
+  background: rgba(245, 234, 212, 0.28);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.storage-origin-note code {
+  overflow-wrap: anywhere;
+  color: var(--primary);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 .stats-section {
@@ -1322,6 +1652,31 @@ tbody td:first-child {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .commitment-body {
+    padding: 16px;
+  }
+
+  .commitment-grid,
+  .verification-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .commitment-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .commitment-actions #confirm-published-button {
+    min-width: 0;
+    grid-column: 1 / -1;
+    margin-left: 0;
+  }
+
+  .audit-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .section-actions > .button {
     flex: 1 1 0;
   }
@@ -1370,6 +1725,30 @@ tbody td:first-child {
     display: none;
   }
 
+  .topbar-actions {
+    gap: 2px;
+  }
+
+  .commitment-actions,
+  .audit-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .commitment-actions #confirm-published-button {
+    grid-column: auto;
+  }
+
+  .commitment-panel,
+  .audit-panel {
+    padding: 13px;
+  }
+
+  .commitment-code,
+  .commitment-input-summary,
+  .audit-seed {
+    font-size: 12px;
+  }
+
   .stats-grid {
     grid-template-columns: 1fr;
   }
@@ -1416,6 +1795,7 @@ tbody td:first-child {
   }
 
   .archive-note,
+  .storage-origin-note,
   .archive-details > summary {
     padding-inline: 16px;
   }

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="论文提问抽签 v4 的输入规范、随机算法、排程规则、承诺公式与验证边界。" />
+    <meta name="theme-color" content="#173b55" />
+    <title>算法与审计协议｜论文提问抽签</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="verifier.css?v=4" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html" aria-label="返回论文提问抽签主页">
+          <span class="brand-icon" aria-hidden="true">◇</span>
+          <span><strong>算法与审计协议</strong><small>v4 固定规则 · 公开可查</small></span>
+        </a>
+        <a class="button ghost back-link" href="index.html"><span aria-hidden="true">←</span> 返回抽签主页</a>
+      </div>
+    </header>
+
+    <main class="verify-shell protocol-page">
+      <section class="verify-hero" aria-labelledby="page-title">
+        <div>
+          <div class="eyebrow"><span aria-hidden="true">◇</span> paper-question-picker/v4</div>
+          <h1 id="page-title">完整算法与审计协议</h1>
+          <p>下面是本站实际遵循的规范原文，包括输入编码、随机流、无偏洗牌、完整排程、承诺公式、验证步骤和能力边界。</p>
+        </div>
+      </section>
+
+      <section class="evidence-warning" aria-label="阅读提示">
+        <span class="warning-icon" aria-hidden="true">i</span>
+        <div><h2>协议透明不等于无限保证</h2><p>请先阅读“目标与保证边界”：v4 能证明公开后未更换输入、种子或安排，但不能单独排除公开前挑选种子。</p></div>
+      </section>
+
+      <section class="card protocol-card" aria-labelledby="protocol-status">
+        <div class="section-head">
+          <div><h2 id="protocol-status">协议原文</h2><p>内容直接读取同一部署中的 ALGORITHM.md，并按纯文本显示</p></div>
+          <a class="button outline" href="ALGORITHM.md" download>下载原始 Markdown</a>
+        </div>
+        <pre id="protocol-document" class="protocol-document" tabindex="0">正在加载协议原文…</pre>
+      </section>
+
+      <footer class="page-footer"><p>验证实现与协议固定测试向量均公开在项目源代码中。</p><a href="verify.html">打开本地验证器</a></footer>
+    </main>
+    <script src="algorithm-viewer.js?v=4"></script>
+  </body>
+</html>

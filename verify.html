@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="在浏览器本地核验论文提问抽签的事前公开承诺与课程结束后的完整审计报告。"
+    />
+    <meta name="theme-color" content="#173b55" />
+    <title>本地验证器｜论文提问抽签</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="verifier.css?v=4" />
+  </head>
+  <body>
+    <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html" aria-label="返回论文提问抽签主页">
+          <span class="brand-icon" aria-hidden="true">✓</span>
+          <span>
+            <strong>抽签本地验证器</strong>
+            <small>本地复算 · 无需上传</small>
+          </span>
+        </a>
+        <a class="button ghost back-link" href="index.html"><span aria-hidden="true">←</span> 返回抽签主页</a>
+      </div>
+    </header>
+
+    <main class="verify-shell">
+      <section class="verify-hero" aria-labelledby="page-title">
+        <div>
+          <div class="eyebrow"><span aria-hidden="true">◇</span> 公开承诺 + 课后种子</div>
+          <h1 id="page-title">在本地核验这次抽签有没有被事后修改</h1>
+          <p>请准备两份在不同时间取得的 JSON 文件。验证器会在当前浏览器中重新计算承诺码、完整安排和公平规则。</p>
+        </div>
+        <div class="local-badge" aria-label="文件仅在本机处理">
+          <span aria-hidden="true">⌁</span>
+          <strong>文件留在本机</strong>
+          <small>本站不会上传或保存</small>
+        </div>
+      </section>
+
+      <section class="evidence-warning" aria-labelledby="two-files-title">
+        <span class="warning-icon" aria-hidden="true">!</span>
+        <div>
+          <h2 id="two-files-title">两份文件缺一不可</h2>
+          <p><strong>事前公开承诺</strong>应从抽签开始前的班级群消息中保存；<strong>完整审计报告</strong>应在课程全部结束后取得。只使用审计报告自带的承诺码，可以检查内部数据是否一致，但不能证明这个承诺曾在抽签前公开。</p>
+        </div>
+      </section>
+
+      <section class="card upload-card" aria-labelledby="upload-title">
+        <div class="section-head">
+          <div>
+            <h2 id="upload-title">载入两份验证材料</h2>
+            <p>文件只在此页面的浏览器内存中解析，不会发送到服务器</p>
+          </div>
+          <span class="secure-chip"><span aria-hidden="true">✓</span> 文件仅在本地处理</span>
+        </div>
+
+        <div class="upload-body">
+          <div class="upload-flow">
+            <section class="file-step" aria-labelledby="receipt-step-title">
+              <div class="step-head">
+                <span class="step-number" aria-hidden="true">1</span>
+                <div>
+                  <span class="step-time">抽签开始前</span>
+                  <h3 id="receipt-step-title">群里保存的公开承诺 JSON</h3>
+                </div>
+              </div>
+              <p>请选择当时发送到班级群、邮件或其他有时间记录渠道的公开承诺凭证。</p>
+              <div class="file-picker">
+                <button id="receipt-file-button" class="button outline" type="button">选择公开承诺文件</button>
+                <input id="receipt-file-input" class="sr-only" type="file" accept="application/json,.json" tabindex="-1" />
+                <span id="receipt-file-status" class="file-status" data-state="empty" aria-live="polite">尚未选择文件</span>
+              </div>
+              <p class="file-safety"><span aria-hidden="true">○</span> 公开凭证不应包含私密种子或未揭晓结果。</p>
+            </section>
+
+            <div class="flow-connector" aria-hidden="true"><span>+</span></div>
+
+            <section class="file-step" aria-labelledby="audit-step-title">
+              <div class="step-head">
+                <span class="step-number" aria-hidden="true">2</span>
+                <div>
+                  <span class="step-time">课程全部结束后</span>
+                  <h3 id="audit-step-title">完整审计报告 JSON</h3>
+                </div>
+              </div>
+              <p>请选择组织者在全部论文抽完后导出的完整审计报告，其中应包含公开种子和最终安排。</p>
+              <div class="file-picker">
+                <button id="audit-file-button" class="button outline" type="button">选择完整审计文件</button>
+                <input id="audit-file-input" class="sr-only" type="file" accept="application/json,.json" tabindex="-1" />
+                <span id="audit-file-status" class="file-status" data-state="empty" aria-live="polite">尚未选择文件</span>
+              </div>
+              <p class="file-safety private"><span aria-hidden="true">●</span> 审计报告含学生名单、完整安排和种子，请勿继续公开扩散。</p>
+            </section>
+          </div>
+
+          <div class="verify-action">
+            <div>
+              <strong>两份文件都准备好了吗？</strong>
+              <p>验证会比对事前承诺，并用公开种子重新生成安排和检查全部规则。</p>
+            </div>
+            <button id="verify-audit-button" class="button primary" type="button" disabled>
+              <span aria-hidden="true">✓</span> 开始本地验证
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="verification-result" class="verification-result" aria-live="polite" aria-atomic="false" hidden></section>
+
+      <section class="explanation-grid" aria-label="验证原理与边界">
+        <article class="card info-card">
+          <div class="info-icon green" aria-hidden="true">◎</div>
+          <h2>公平规则也会重新检查</h2>
+          <ol class="rule-list">
+            <li><span>1</span><p>学生数与论文数相等，人数不少于 9 且为 3 的倍数。</p></li>
+            <li><span>2</span><p>每周 3 篇论文、每篇 3 人，同一周的 9 人不重复。</p></li>
+            <li><span>3</span><p>优先安排累计次数最少的学生，同次数者由验证种子决定顺序。</p></li>
+            <li><span>4</span><p>全部课程结束后，每位学生恰好被安排 3 次。</p></li>
+          </ol>
+        </article>
+
+        <article class="card info-card">
+          <div class="info-icon blue" aria-hidden="true">◇</div>
+          <h2>验证成功能证明什么？</h2>
+          <ul class="check-list">
+            <li>事前凭证中的承诺码与审计报告一致。</li>
+            <li>公开种子、输入和完整安排能重新计算出同一个承诺码。</li>
+            <li>用同一种子重放算法，会得到相同的全程安排。</li>
+            <li>最终安排满足页面列出的全部公平规则。</li>
+          </ul>
+        </article>
+
+        <article class="card info-card limitation-card">
+          <div class="info-icon gold" aria-hidden="true">!</div>
+          <h2>它不能证明什么？</h2>
+          <p>承诺机制可以证明<strong>公开之后没有改动</strong>，但不能证明组织者在公开之前没有反复生成多个候选结果并挑选其中一个。班级群消息的时间记录，是判断承诺是否确实提前公开的重要依据。</p>
+          <p>验证器也无法独立确认文件由谁发送，参与者仍需把公开凭证与原始群消息中的文件或承诺码进行核对。</p>
+        </article>
+      </section>
+
+      <footer class="page-footer">
+        <p>验证过程完全在浏览器本地执行。为保护学生信息，验证完毕后请妥善保管或删除审计文件。</p>
+        <a href="index.html">返回论文提问抽签</a>
+      </footer>
+    </main>
+
+    <script src="lottery-core.js?v=4"></script>
+    <script src="audit-core.js?v=4"></script>
+    <script src="verify.js?v=4"></script>
+  </body>
+</html>

@@ -22,7 +22,7 @@
       crypto.getRandomValues(value);
       return value[0] / 4294967296;
     }
-    return Math.random();
+    throw new Error("当前浏览器不支持安全随机数，无法生成抽签安排。");
   }
 
   function createSchedule(studentNames, papers, random) {
