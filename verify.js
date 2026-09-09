@@ -273,7 +273,10 @@
     const planWeeks = plan && Array.isArray(plan.weeks) ? plan.weeks : null;
     if (students && papers && planWeeks) {
       const totals = new Array(students.length).fill(0);
+      const presentationTotals = new Array(students.length).fill(0);
       let weeklyShape = true;
+      let presenterShape = true;
+      let presenterMode = null;
       let paperSlots = 0;
       planWeeks.forEach(function inspectPlanWeek(week, weekIndex) {
         if (!week || week.weekIndex !== weekIndex || !Array.isArray(week.assignments) || week.assignments.length !== 3) {
@@ -293,16 +296,36 @@
             if (!Number.isInteger(index) || index < 0 || index >= students.length) weeklyShape = false;
             else totals[index] += 1;
           });
+          const hasPresenter = Object.prototype.hasOwnProperty.call(assignment, "presenterIndex");
+          if (presenterMode === null) presenterMode = hasPresenter;
+          if (presenterMode !== hasPresenter) presenterShape = false;
+          if (hasPresenter) {
+            const presenterIndex = assignment.presenterIndex;
+            if (!Number.isInteger(presenterIndex) || presenterIndex < 0 || presenterIndex >= students.length ||
+                assignment.studentIndexes.includes(presenterIndex)) {
+              presenterShape = false;
+            } else {
+              presentationTotals[presenterIndex] += 1;
+            }
+          }
         });
         if (weeklyIndexes.length !== 9 || new Set(weeklyIndexes).size !== 9) weeklyShape = false;
       });
       const countShape = students.length === papers.length && students.length >= 9 &&
         students.length % 3 === 0 && planWeeks.length === students.length / 3 && paperSlots === papers.length;
-      return [
+      const checks = [
         normalizedCheck("学生数与论文数相等，且人数符合规则", countShape),
-        normalizedCheck("每周 3 篇、每篇 3 人、同周 9 人不重复", weeklyShape),
-        normalizedCheck("每位学生在完整安排中恰好出现 3 次", totals.every(function three(count) { return count === 3; })),
+        normalizedCheck("每周 3 篇、每篇 3 位提问人、同周 9 位提问人不重复", weeklyShape),
+        normalizedCheck("每位学生在完整安排中恰好提问 3 次", totals.every(function three(count) { return count === 3; })),
       ];
+      if (presenterMode || !presenterShape) {
+        checks.push(
+          normalizedCheck("每篇论文恰好有 1 位报告人，且不是本篇提问人", presenterShape),
+          normalizedCheck("每位学生在完整安排中恰好报告 1 篇",
+            presenterShape && presentationTotals.every(function one(count) { return count === 1; })),
+        );
+      }
+      return checks;
     }
     if (!students || !papers || !scheduleStudents || !weeks) return [];
 
@@ -311,8 +334,11 @@
     });
     const knownIds = new Set(studentIds.filter(Boolean));
     const totals = new Map(studentIds.filter(Boolean).map(function zero(id) { return [id, 0]; }));
+    const presentationTotals = new Map(studentIds.filter(Boolean).map(function zeroPresentation(id) { return [id, 0]; }));
     let paperSlots = 0;
     let weeklyShape = true;
+    let presenterShape = true;
+    let presenterMode = null;
 
     weeks.forEach(function inspectWeek(week) {
       if (!week || !Array.isArray(week.assignments) || week.assignments.length !== 3) {
@@ -334,6 +360,16 @@
             totals.set(id, totals.get(id) + 1);
           }
         });
+        const hasPresenter = Object.prototype.hasOwnProperty.call(assignment, "presenterId");
+        if (presenterMode === null) presenterMode = hasPresenter;
+        if (presenterMode !== hasPresenter) presenterShape = false;
+        if (hasPresenter) {
+          if (!knownIds.has(assignment.presenterId) || assignment.studentIds.includes(assignment.presenterId)) {
+            presenterShape = false;
+          } else {
+            presentationTotals.set(assignment.presenterId, presentationTotals.get(assignment.presenterId) + 1);
+          }
+        }
       });
       if (weeklyIds.length !== 9 || new Set(weeklyIds).size !== 9) weeklyShape = false;
     });
@@ -344,11 +380,19 @@
     const exactlyThree = totals.size === students.length &&
       Array.from(totals.values()).every(function three(count) { return count === 3; });
 
-    return [
+    const checks = [
       normalizedCheck("学生数与论文数相等，且人数符合规则", countShape),
-      normalizedCheck("每周 3 篇、每篇 3 人、同周 9 人不重复", weeklyShape),
-      normalizedCheck("每位学生在完整安排中恰好出现 3 次", exactlyThree),
+      normalizedCheck("每周 3 篇、每篇 3 位提问人、同周 9 位提问人不重复", weeklyShape),
+      normalizedCheck("每位学生在完整安排中恰好提问 3 次", exactlyThree),
     ];
+    if (presenterMode || !presenterShape) {
+      checks.push(
+        normalizedCheck("每篇论文恰好有 1 位报告人，且不是本篇提问人", presenterShape),
+        normalizedCheck("每位学生在完整安排中恰好报告 1 篇",
+          presenterShape && Array.from(presentationTotals.values()).every(function one(count) { return count === 1; })),
+      );
+    }
+    return checks;
   }
 
   function deduplicateChecks(checks) {
@@ -412,7 +456,12 @@
             return "[" + studentIndex + "] " + students[studentIndex];
           });
           lines.push("[论文 " + paperIndex + "] " + papers[paperIndex]);
-          lines.push("  " + selected.join(" ｜ "));
+          if (Object.prototype.hasOwnProperty.call(assignment, "presenterIndex")) {
+            lines.push("  报告：[" + assignment.presenterIndex + "] " + students[assignment.presenterIndex]);
+          } else {
+            lines.push("  报告：v4 旧协议未分配");
+          }
+          lines.push("  提问：" + selected.join(" ｜ "));
         });
       });
 
@@ -478,8 +527,14 @@
     const assignmentCount = weeks.reduce(function countAssignments(total, week) {
       return total + (week && Array.isArray(week.assignments) ? week.assignments.length : 0);
     }, 0);
+    const hasPresenters = weeks.some(function presenterPlan(week) {
+      return week && Array.isArray(week.assignments) && week.assignments.some(function presenterAssignment(assignment) {
+        return assignment && Object.prototype.hasOwnProperty.call(assignment, "presenterIndex");
+      });
+    });
     const planSummary = planDigest ||
-      (weeks.length + " 周 · " + assignmentCount + " 篇论文 · " + assignmentCount * 3 + " 个提问名额");
+      (weeks.length + " 周 · " + assignmentCount + " 篇论文 · " + assignmentCount * 3 +
+        " 个提问名额" + (hasPresenters ? " · " + assignmentCount + " 个报告名额" : ""));
     const algorithm = firstValue([
       ownValue(outcome, "algorithmVersion"),
       ownValue(receipt, "algorithmVersion"),

@@ -9,19 +9,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="为课堂论文讨论生成每周不重复、全程次数均衡且可公开验证的提问安排。"
+      content="为课堂论文讨论生成可公开验证的报告人与提问人安排：每人报告一篇、提问三次。"
     />
     <meta name="theme-color" content="#173b55" />
     <meta property="og:title" content="论文提问抽签" />
     <meta
       property="og:description"
-      content="每周三篇论文、每篇三人，同周不重复，全程次数均衡。"
+      content="每篇一位报告人、三位提问人；每人报告一篇、提问三次，全程可验证。"
     />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://zjwulbx.github.io/paper-question-picker/og.png" />
     <title>论文提问抽签</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=4" />
+    <link rel="stylesheet" href="styles.css?v=5" />
   </head>
   <body>
     <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -32,7 +32,7 @@
           <span class="brand-icon" aria-hidden="true">⚄</span>
           <div>
             <div class="brand-title">论文提问抽签</div>
-            <div class="brand-subtitle">公平、随机、每周不重复、全程可验证</div>
+            <div class="brand-subtitle">报告一人一篇 · 提问全程均衡 · 可验证</div>
           </div>
         </div>
         <div class="topbar-actions">
@@ -49,9 +49,9 @@
     <main class="shell">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <div class="eyebrow"><span aria-hidden="true">✦</span> 最低次数优先 · 同层随机</div>
+          <div class="eyebrow"><span aria-hidden="true">✦</span> 提问均衡 · 报告一人一篇</div>
           <h1 id="hero-title">愿每一次讨论，都能带来新的启发与收获</h1>
-          <p>每周三篇论文、每篇三人。同一周 9 人不重复，课程结束时每位学生恰好被抽中三次；抽签前可公开承诺，结束后可自行在本地复核。</p>
+          <p>每周三篇论文，每篇随机分配 1 位报告人和 3 位提问人。每人全程恰好报告 1 篇、提问 3 次；同篇论文两种角色不重复，结果可在课后本地复核。</p>
         </div>
         <div class="metrics" aria-label="课程概况">
           <div class="metric">
@@ -109,7 +109,7 @@
               <span aria-hidden="true">·</span>
               <button id="clear-button" class="button text muted" type="button">清空</button>
             </div>
-            <p id="save-note" class="save-note">系统先生成全程安排，确保后续不会出现无解。</p>
+            <p id="save-note" class="save-note">系统先生成全程安排，确保每人恰好报告一篇。</p>
           </div>
         </aside>
 
@@ -164,12 +164,12 @@
                 <ol class="verification-steps">
                   <li><strong>锁定输入</strong><span>规范化学生名单与论文列表，生成输入摘要。</span></li>
                   <li><strong>提前承诺</strong><span>用私密随机种子生成全程安排；在种子保密时，公开承诺码在现实中无法用于反推内容。</span></li>
-                  <li><strong>依次揭晓</strong><span>按最低次数优先、同次数随机及同周不重复规则进行抽签。</span></li>
+                  <li><strong>依次揭晓</strong><span>提问人按最低次数优先且同周不重复；报告人全程一人一篇，不与本篇提问人重复。</span></li>
                   <li><strong>课后复核</strong><span>全部结束后公开种子，用本地验证器重算并核对承诺与结果。</span></li>
                 </ol>
                 <p class="protocol-link"><a href="algorithm.html">查看完整算法与审计协议</a> · <a href="https://github.com/zjwulbx/paper-question-picker">查看公开源代码</a></p>
                 <p class="commitment-limit"><strong>验证边界：</strong>承诺能证明公开后没有更换输入、种子或安排，但不能单独证明组织者在公开前没有反复生成并挑选结果。建议现场生成后立即把公开凭证发到班级群。</p>
-                <p class="legacy-compat"><strong>旧记录兼容：</strong>旧版历史仍可查看、恢复和继续抽签；因创建时没有承诺码，会明确标记为旧版记录，不会生成伪造的验证凭证。</p>
+                <p class="legacy-compat"><strong>角色说明：</strong>报告人可以在其他论文中担任提问人；禁止的是同一篇论文内两种角色重复。<strong>旧记录兼容：</strong>v4 安排仍可验证和继续，但不会事后补造未被原承诺锁定的报告人。</p>
               </details>
 
               <section id="audit-panel" class="audit-panel" aria-labelledby="audit-title" hidden>
@@ -205,7 +205,7 @@
               </div>
             </div>
             <div id="archive-list" class="archive-list"></div>
-            <p class="archive-note"><strong>备份提示：</strong>JSON 备份可放入可信的微信文件或私有网盘，换设备后再导入。它始终是私密恢复文件，含验证种子、姓名和完整预排结果，请勿发群或公开分享；班级核验请使用课程结束后导出的审计报告。<span>旧版历史仍可恢复，但会标记为不可验证，不会补造承诺凭证。</span></p>
+            <p class="archive-note"><strong>备份提示：</strong>JSON 备份可放入可信的微信文件或私有网盘，换设备后再导入。它始终是私密恢复文件，含验证种子、姓名和完整预排结果，请勿发群或公开分享；班级核验请使用课程结束后导出的审计报告。<span>v1–v3 旧记录不可重放验证；v4 记录可验证原提问安排，但不含报告人。</span></p>
             <p class="storage-origin-note"><strong>本机隐私：</strong>未揭晓安排会保存在当前浏览器。请使用受控设备；同一 <code>zjwulbx.github.io</code> 域名下的其他 Pages 项目理论上共享这份浏览器存储，长期使用建议配置本应用独占域名。</p>
           </section>
 
@@ -227,7 +227,7 @@
             <div class="section-head">
               <div>
                 <h2><span aria-hidden="true">◎</span> 公平性统计</h2>
-                <p>累计次数按已揭晓结果计算，最高不超过 3 次</p>
+                <p>按已揭晓结果分别统计：每人提问 3 次、报告 1 篇</p>
               </div>
               <div class="progress-copy">
                 <strong id="course-progress-count">0 / 12 篇</strong>
@@ -245,9 +245,9 @@
       </section>
     </main>
 
-    <script src="lottery-core.js?v=4"></script>
-    <script src="history-core.js?v=4"></script>
-    <script src="audit-core.js?v=4"></script>
-    <script src="app.js?v=4"></script>
+    <script src="lottery-core.js?v=5"></script>
+    <script src="history-core.js?v=5"></script>
+    <script src="audit-core.js?v=5"></script>
+    <script src="app.js?v=5"></script>
   </body>
 </html>

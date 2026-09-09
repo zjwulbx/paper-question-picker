@@ -79,7 +79,11 @@
       }) : null,
       weeks: Array.isArray(schedule.weeks) ? schedule.weeks.map(function weekRow(week) {
         return [week.id, Array.isArray(week.assignments) ? week.assignments.map(function assignmentRow(assignment) {
-          return [assignment.paper, assignment.studentIds];
+          return [
+            assignment.paper,
+            assignment.studentIds,
+            Object.hasOwn(assignment, "presenterId") ? assignment.presenterId : null,
+          ];
         }) : null];
       }) : null,
     });
@@ -334,6 +338,7 @@
         return [{
           week: weekIndex + 1,
           paper: assignment.paper,
+          presenter: Object.hasOwn(assignment, "presenterId") ? names[assignment.presenterId] : null,
           names: assignment.studentIds.map(function studentName(id) { return names[id]; }),
         }];
       });

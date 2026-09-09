@@ -568,7 +568,7 @@ textarea:disabled {
 .paper-card {
   position: relative;
   display: flex;
-  min-height: 320px;
+  min-height: 405px;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -593,7 +593,7 @@ textarea:disabled {
 }
 
 .placeholder-card {
-  min-height: 282px;
+  min-height: 372px;
   background: var(--paper);
   box-shadow: none;
 }
@@ -623,6 +623,71 @@ textarea:disabled {
 
 .placeholder-card h3 {
   color: var(--muted);
+}
+
+.presenter-slot {
+  display: flex;
+  min-height: 49px;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0 0;
+  border: 1px solid rgba(23, 59, 85, 0.2);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: var(--primary);
+  background: rgba(226, 237, 245, 0.58);
+  font-size: 12px;
+}
+
+.presenter-slot > span {
+  flex: 0 0 auto;
+  border-radius: 7px;
+  padding: 4px 7px;
+  color: white;
+  background: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.presenter-slot > b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.presenter-slot.waiting {
+  border-style: dashed;
+  border-color: rgba(23, 59, 85, 0.28);
+  color: var(--muted);
+}
+
+.presenter-slot.revealed {
+  border-color: rgba(23, 59, 85, 0.3);
+  animation: slip-in 430ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.presenter-slot.shuffling {
+  border-color: rgba(189, 129, 45, 0.4);
+  animation: shuffle 350ms ease-in-out infinite alternate;
+}
+
+.presenter-slot.unavailable {
+  border-style: dashed;
+  color: var(--muted);
+  background: rgba(240, 234, 223, 0.42);
+}
+
+.presenter-slot.unavailable > span {
+  color: var(--muted);
+  background: var(--paper-deep);
+}
+
+.role-label {
+  margin: 13px 1px -9px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .slots {
@@ -828,7 +893,7 @@ textarea:disabled {
 
 table {
   width: 100%;
-  min-width: 630px;
+  min-width: 760px;
   border-collapse: collapse;
   text-align: left;
   font-size: 12px;
@@ -875,6 +940,22 @@ tbody td:first-child {
   background: var(--green-soft);
   font-size: 11px;
   font-weight: 700;
+}
+
+.presenter-tag {
+  display: inline-flex;
+  border-radius: 7px;
+  padding: 4px 8px;
+  color: var(--primary);
+  background: rgba(226, 237, 245, 0.72);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.presenter-tag.muted {
+  color: var(--muted);
+  background: var(--paper-deep);
 }
 
 .empty-records {
@@ -1451,13 +1532,23 @@ tbody td:first-child {
   white-space: nowrap;
 }
 
-.student-stat > b {
-  width: 29px;
+.role-counts {
+  display: grid;
   flex: 0 0 auto;
+  gap: 2px;
+  text-align: right;
+}
+
+.role-counts b,
+.role-counts small {
   color: var(--muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  white-space: nowrap;
+}
+
+.role-counts .presentation-count {
+  color: var(--primary);
 }
 
 .count-dots {
@@ -1707,7 +1798,7 @@ tbody td:first-child {
   }
 
   table {
-    min-width: 560px;
+    min-width: 720px;
   }
 }
 

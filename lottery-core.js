@@ -104,6 +104,19 @@
     return counts;
   }
 
+  function countRevealedPresentations(schedule) {
+    const counts = Object.fromEntries(schedule.students.map(function initialCount(student) {
+      return [student.id, 0];
+    }));
+    schedule.weeks.forEach(function countWeek(week) {
+      week.assignments.forEach(function countAssignment(assignment, paperIndex) {
+        if (!week.revealed[paperIndex] || !Object.hasOwn(assignment, "presenterId")) return;
+        if (Object.hasOwn(counts, assignment.presenterId)) counts[assignment.presenterId] += 1;
+      });
+    });
+    return counts;
+  }
+
   function verifySchedule(candidate) {
     if (!candidate || typeof candidate !== "object") return false;
     const students = candidate.students;
@@ -127,6 +140,8 @@
     const totals = Object.fromEntries(students.map(function initialCount(student) { return [student.id, 0]; }));
     const paperNames = new Set();
     const weekIds = new Set();
+    const presenterIds = [];
+    let presenterMode = null;
 
     for (const week of weeks) {
       if (
@@ -139,6 +154,9 @@
 
       const weeklyIds = [];
       for (const assignment of week.assignments) {
+        const hasPresenter = Object.hasOwn(assignment || {}, "presenterId");
+        if (presenterMode === null) presenterMode = hasPresenter;
+        if (presenterMode !== hasPresenter) return false;
         if (
           !assignment || typeof assignment.paper !== "string" || !assignment.paper.trim() || paperNames.has(assignment.paper) ||
           !Array.isArray(assignment.studentIds) || assignment.studentIds.length !== 3
@@ -149,16 +167,26 @@
           weeklyIds.push(studentId);
           totals[studentId] += 1;
         }
+        if (hasPresenter) {
+          if (
+            typeof assignment.presenterId !== "string" ||
+            !Object.hasOwn(totals, assignment.presenterId) ||
+            assignment.studentIds.includes(assignment.presenterId)
+          ) return false;
+          presenterIds.push(assignment.presenterId);
+        }
       }
       if (weeklyIds.length !== 9 || new Set(weeklyIds).size !== 9) return false;
     }
 
-    return Object.values(totals).every(function exactlyThree(count) { return count === 3; });
+    if (!Object.values(totals).every(function exactlyThree(count) { return count === 3; })) return false;
+    return !presenterMode || (presenterIds.length === students.length && new Set(presenterIds).size === students.length);
   }
 
   return {
     browserRandom: browserRandom,
     createSchedule: createSchedule,
+    countRevealedPresentations: countRevealedPresentations,
     countRevealedSelections: countRevealedSelections,
     verifySchedule: verifySchedule,
   };

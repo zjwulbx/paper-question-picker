@@ -1,167 +1,139 @@
-# 论文提问抽签 v4 算法与审计协议
+# 论文报告与提问抽签 v5 算法与审计协议
 
-本文定义 v4 抽签的规范化输入、随机数生成、排程、事前承诺和事后审计格式。文中的“必须”“不得”“应当”是协议要求；实现若偏离这些要求，必须使用新的协议或算法版本号，不能继续声称兼容 v4。
+本文定义 v5 的规范化输入、确定性随机流、提问人排程、报告人匹配、事前承诺和事后审计格式。文中的“必须”“不得”“应当”是协议要求；实现若改变任何会影响字节或抽签结果的步骤，必须改用新的协议或算法版本号。
 
-## 1. 目标与保证边界
+v4 已冻结且继续受支持。它只分配提问人，完整旧规范见 [ALGORITHM-v4.md](ALGORITHM-v4.md)；任何实现都不得用 v5 规则重新解释 v4 凭证或报告。
 
-v4 的目标是让任何学生只凭：
+## 1. 角色规则与保证边界
 
-1. 抽签开始前保存的公开承诺凭证；
-2. 全部抽签完成后取得的审计报告；
-3. 一份符合本规范的独立验证器；
+设规范化后的学生数和论文数均为 `N`，且 `N >= 9`、`N` 是 3 的倍数。v5 预先生成全程唯一的一份计划：
 
-即可重算完整安排，并检查名单、论文、随机种子、最终安排是否与事前承诺一致。
+- 每周按论文输入顺序安排 3 篇论文；
+- 每篇论文有 3 位提问人；同一周 9 个提问名额由 9 位不同学生承担；
+- 每位学生在全部课程中恰好提问 3 次；
+- 每篇论文有 1 位报告人；每位学生在全部课程中恰好报告 1 篇；
+- 一篇论文的报告人不得是该篇的 3 位提问人；
+- 报告人可以为其他论文提问，包括同一周内的其他论文。禁止“跨论文重复”专指同一学生不得报告两篇论文，不代表报告角色与其他论文的提问角色互斥。
 
-v4 能证明的是：**一份已经公开并由学生保存的承诺，在公开之后没有被换成另一份输入、随机种子或安排。**
+学生拿到抽签前的公开承诺凭证、全部结束后的最终审计报告和独立验证器后，可以重算完整计划，检查输入、随机种子、报告人与提问人安排是否与事前承诺一致。
 
-v4 单独不能证明：
+v5 能证明的是：一份已经公开并由学生保存的承诺，在公开之后没有被换成另一份输入、随机种子或安排。它单独不能证明：
 
-- 承诺凭证确实在某个时间之前生成；凭证中的 `issuedAt` 只是本机自报时间。
-- 组织者在公开承诺之前没有反复生成随机种子并挑选喜欢的安排。
-- 组织者使用的是未经修改的网页、验证器或操作系统。
-- 浏览器扩展、同源网页、恶意脚本或取得设备权限的人没有提前读取私密随机种子。
-- 页面展示过的结果一定与报告相同；学生仍应将自己看到或保存的结果与验证器重放结果核对。
+- 凭证确实在所声称的时间生成；`issuedAt` 是本机自报时间；
+- 组织者在公开凭证前没有反复生成并挑选种子；
+- 运行网页、验证器、浏览器或操作系统没有被修改；
+- 页面曾经展示的内容与最终报告完全相同。
 
-因此，组织者必须在第一次揭晓前，把完整承诺值发送到班级群、邮件或其他会保留第三方时间记录的渠道。群消息的服务端时间可以提供“何时已经公开”的外部证据；网页自身的时间不能提供这种证据。
+因此，第一次揭晓前必须把完整承诺 JSON 发到班级群、邮件等带外部时间记录的渠道。学生也应保存自己看到的结果，与最终重放结果核对。
 
-如果使用场景还要求抵御“公开前挑种子”，必须引入承诺之后才产生、且不受组织者单方控制的随机量，具体见第 10 节。
+## 2. 固定标识与编码原语
 
-## 2. 固定标识与基本类型
-
-v4 使用以下精确 ASCII 标识：
+v5 使用以下精确 ASCII 标识：
 
 ```text
-PROTOCOL_ID      = paper-question-picker/v4
+PROTOCOL_ID      = paper-question-picker/v5
 NORMALIZATION_ID = nfc-lines/v1
-RNG_ID           = sha256-ctr-u64be-u32be-reject/v1
-SCHEDULE_ID      = min-count-fisher-yates/v1
+RNG_ID           = sha256-ctr-split-u64be-u32be-reject/v2
+SCHEDULE_ID      = min-count-plus-uniform-presenter-matching/v2
 ```
 
-域分离标签为下列 UTF-8 字节，末尾的 `\0` 是一个值为 `0x00` 的字节，不是两个可见字符：
+域分离标签为下列 UTF-8 字节；末尾的 `\0` 是一个 `0x00` 字节：
 
 ```text
-D_INPUT     = UTF8("paper-question-picker/input/v4\0")
-D_COMMIT    = UTF8("paper-question-picker/commitment/v4\0")
-D_RNG_KEY   = UTF8("paper-question-picker/rng-key/v4\0")
-D_RNG_BLOCK = UTF8("paper-question-picker/rng-block/v4\0")
-D_PLAN      = UTF8("paper-question-picker/plan/v4\0")
+D_INPUT               = UTF8("paper-question-picker/input/v5\0")
+D_COMMIT              = UTF8("paper-question-picker/commitment/v5\0")
+D_QUESTION_RNG_KEY    = UTF8("paper-question-picker/rng-key/questions/v5\0")
+D_QUESTION_RNG_BLOCK  = UTF8("paper-question-picker/rng-block/questions/v5\0")
+D_PRESENTER_RNG_KEY   = UTF8("paper-question-picker/rng-key/presenters/v5\0")
+D_PRESENTER_RNG_BLOCK = UTF8("paper-question-picker/rng-block/presenters/v5\0")
+D_PLAN                = UTF8("paper-question-picker/plan/v5\0")
 ```
 
 编码原语：
 
-- `UTF8(s)`：不带 BOM 的标准 UTF-8 编码。含未配对 UTF-16 代理项的字符串必须拒绝，不能静默替换为 `U+FFFD`。
-- `U32BE(n)`：无符号 32 位大端整数，允许范围为 `0..2^32-1`。
-- `U64BE(n)`：无符号 64 位大端整数，允许范围为 `0..2^64-1`。
+- `UTF8(s)`：无 BOM 的标准 UTF-8；含未配对 UTF-16 代理项的字符串必须拒绝。
+- `U32BE(n)`：无符号 32 位大端整数，范围 `0..2^32-1`。
+- `U64BE(n)`：无符号 64 位大端整数，范围 `0..2^64-1`。
 - `LP(b)`：`U32BE(b.length) || b`。
 - `TEXT(s)`：`LP(UTF8(s))`。
 - `||`：字节串连接。
-- `SHA256(b)`：对字节串 `b` 计算 SHA-256，结果为 32 个原始字节。
-- 对外 JSON 中的 32 字节值一律编码为 64 个小写十六进制字符，不带 `0x`、空格或分隔符。解析器必须拒绝非规范编码。
+- `SHA256(b)`：SHA-256 的 32 字节原始结果。
 
-协议散列不得改用普通字符串拼接，也不得直接依赖一般 JSON 文本的键顺序、空白或转义方式。
+JSON 中的 32 字节值必须写成 64 位小写十六进制，不带 `0x` 或分隔符。协议散列不得依赖普通字符串拼接或 JSON 键顺序。
 
-## 3. 输入规范化
-
-### 3.1 从文本框得到有序数组
+## 3. 输入规范化与摘要
 
 学生名单和论文列表分别按以下顺序处理：
 
-1. 将 `CRLF` 和单独的 `CR` 都视为换行，与 `LF` 等价。
-2. 按换行拆成行。
-3. 拒绝含未配对 UTF-16 代理项的行。
-4. 对每一行执行 Unicode NFC 规范化。
-5. 删除行首、行尾属于下列固定集合的字符：`U+0009..U+000D`、`U+0020`、`U+00A0`、`U+1680`、`U+2000..U+200A`、`U+2028`、`U+2029`、`U+202F`、`U+205F`、`U+3000`、`U+FEFF`。
-6. 丢弃处理后为空的行。
-7. 保留剩余行的原始顺序；内部空白、大小写和标点不得改变。
+1. 把 `CRLF` 和单独的 `CR` 都视为 `LF`；
+2. 按换行拆分；
+3. 拒绝含未配对 UTF-16 代理项的行；
+4. 对每行执行 Unicode NFC；
+5. 删除行首尾属于以下固定集合的字符：`U+0009..U+000D`、`U+0020`、`U+00A0`、`U+1680`、`U+2000..U+200A`、`U+2028`、`U+2029`、`U+202F`、`U+205F`、`U+3000`、`U+FEFF`；
+6. 丢弃空行；
+7. 保留剩余行顺序，不改变内部空白、大小写或标点。
 
-实现必须把规范化后的两个有序数组展示给组织者确认。承诺针对这两个数组，不针对原始文本框字节。
+两个数组内部都不得出现规范化后完全相同的项目。站点还要求：
 
-规范化后完全相同的两个学生名称或两个论文标题必须拒绝。v4 不使用 `localeCompare`、`toLocaleLowerCase` 或依赖浏览器语言环境的大小写规则；需要区分同名学生时，应在名称中人工加入稳定标识。
+- `students.length === papers.length === N`；
+- `9 <= N <= 10000`，且 `N` 是 3 的倍数；
+- 每项 UTF-8 长度为 `1..4096` 字节；
+- 下述 `INPUT_BYTES` 不超过 8 MiB。
 
-### 3.2 输入约束
-
-设学生数组为 `students`，论文数组为 `papers`，长度均为 `N`。输入必须满足：
-
-- `N >= 9`；
-- `N` 是 3 的倍数；
-- `students.length === papers.length`；
-- v4 站点配置限制 `N <= 10000`；
-- 每个规范化名称或标题的 UTF-8 长度为 `1..4096` 字节；
-- 第 3.3 节的 `INPUT_BYTES` 总长度不超过 8 MiB。
-
-学生和论文的协议身份都是它们在规范化数组中的零基下标。显示名称不是身份键。
-
-### 3.3 输入字节与输入摘要
+学生和论文的协议身份都是规范化数组中的零基下标：
 
 ```text
 INPUT_BYTES =
     U32BE(N)
- || TEXT(students[0])
- || ...
- || TEXT(students[N-1])
+ || TEXT(students[0]) || ... || TEXT(students[N-1])
  || U32BE(N)
- || TEXT(papers[0])
- || ...
- || TEXT(papers[N-1])
+ || TEXT(papers[0])   || ... || TEXT(papers[N-1])
 
 inputDigest = SHA256(D_INPUT || LP(INPUT_BYTES))
 ```
 
-输入顺序属于承诺内容。即使名称和标题集合相同，只要顺序不同，`inputDigest` 通常就不同。
+输入顺序属于承诺内容。
 
-## 4. 随机种子与确定性随机流
+## 4. 随机种子和两条独立随机流
 
-### 4.1 随机种子
-
-每次新抽签必须调用 Web Crypto：
+每次新建抽签必须由 Web Crypto 取得恰好 32 个随机字节：
 
 ```js
 crypto.getRandomValues(new Uint8Array(32))
 ```
 
-取得恰好 32 个随机字节作为 `seed`。Web Crypto 不可用或调用失败时必须停止，绝不能回退到 `Math.random()`、当前时间、UUID 或用户姓名等低熵来源。
+失败时必须停止，绝不能退回 `Math.random()`、时间戳或 UUID。
 
-同一次抽签只能有一个 `seed`。要求重新生成时必须创建一次全新的抽签和全新的承诺，旧承诺不得被原地覆盖。
-
-### 4.2 随机流密钥
+提问人和报告人使用同一个 `seed`，但使用两个域分离的随机流，避免报告人匹配的重试改变提问人结果。对用途 `role`：
 
 ```text
-rngKey = SHA256(D_RNG_KEY || seed || inputDigest)
+role = questions:
+    KEY_DOMAIN   = D_QUESTION_RNG_KEY
+    BLOCK_DOMAIN = D_QUESTION_RNG_BLOCK
+
+role = presenters:
+    KEY_DOMAIN   = D_PRESENTER_RNG_KEY
+    BLOCK_DOMAIN = D_PRESENTER_RNG_BLOCK
+
+rngKey = SHA256(KEY_DOMAIN || seed || inputDigest)
+block(counter) = SHA256(BLOCK_DOMAIN || rngKey || U64BE(counter))
 ```
 
-把输入摘要加入密钥派生，可避免相同种子在不同输入上复用完全相同的随机流。
+`counter` 从 0 开始；随机字节流为 `block(0) || block(1) || ...`。每个流分别维护自己的 counter 和读取位置。读取 `U32` 时连续取 4 字节并按大端解释；counter 超出 `2^64-1` 必须停止。
 
-### 4.3 SHA-256 counter 字节流
+## 5. 无偏整数与洗牌
 
-计数器 `counter` 从 0 开始。第 `counter` 个 32 字节块为：
-
-```text
-block(counter) = SHA256(D_RNG_BLOCK || rngKey || U64BE(counter))
-```
-
-随机流是 `block(0) || block(1) || ...`。消费者必须从第一个字节开始按顺序读取，不能跳块、回退或并行改变消费顺序。计数器超过 `2^64-1` 时必须报错停止。
-
-每次需要无符号 32 位数时，从流中连续读取 4 字节并按大端解释为 `x`。不能用会产生有符号 32 位结果的 JavaScript 位运算替代规范读取；推荐 `DataView.getUint32(offset, false)`。
-
-## 5. 无偏整数与 Fisher–Yates
-
-### 5.1 拒绝采样
-
-`uniform(n)` 返回 `0..n-1` 的均匀整数。`n` 必须是 `1..2^32` 范围内的整数：
+`uniform(n)` 返回 `0..n-1` 的均匀整数，`n` 必须位于 `1..2^32`：
 
 ```text
 limit = floor(2^32 / n) * n
 循环：
-    x = 从随机流读取一个 U32BE
-    若 x >= limit：丢弃 x 并继续
+    x = 从当前随机流读取一个 U32BE
+    若 x >= limit：丢弃并继续
     否则返回 x mod n
 ```
 
-被拒绝的 `x` 已被消费，不能复用。实现不得直接使用 `x mod n` 而省略拒绝步骤。
-
-### 5.2 洗牌
-
-`shuffle(A)` 返回数组副本，不修改调用方的原数组。对副本执行以下精确的逆向 Fisher–Yates：
+`shuffle(A)` 必须复制输入，并在副本上执行逆向 Fisher–Yates：
 
 ```text
 for i = A.length - 1 down to 1:
@@ -170,53 +142,80 @@ for i = A.length - 1 down to 1:
 return A
 ```
 
-长度为 0 或 1 的数组不消费随机字节。
+长度 0 或 1 的数组不消耗随机字节。
 
-## 6. 完整排程算法
+## 6. 提问人排程
 
-每周有 3 篇论文，每篇抽取 3 名学生，因此每周选择 9 名互不重复的学生。论文按规范化输入顺序每 3 篇组成一周。
-
-算法只使用零基学生下标和论文下标：
+论文按规范化输入顺序每 3 篇组成一周。只使用 `questions` 随机流：
 
 ```text
-counts = 长度为 N、全部为 0 的整数数组
+counts = 长度 N、初值全 0
 weeks = []
 
-for weekIndex = 0 .. N/3 - 1:
+for weekIndex = 0 .. N/3-1:
     selected = []
+    levels = counts 在本周开始时的不同值，升序
 
-    levels = counts 在本周开始时出现过的不同数值，按数值升序排列
-    for each level in levels:
+    for level in levels:
         candidates = 按学生下标 0..N-1 升序扫描，
-                     取 counts[index] == level 且尚未进入 selected 的下标
+                     取 counts[index] == level 且不在 selected 的下标
         candidates = shuffle(candidates)
-        从 candidates 开头依次追加，直到 candidates 用完或 selected 长度达到 9
-        若 selected 长度达到 9，立即结束 levels 循环
+        从头追加到 selected，直到 candidates 用完或 selected 长度为 9
+        若 selected 长度为 9：结束 levels 循环
 
-    若 selected 长度不等于 9：报错
-
+    若 selected 长度不为 9：失败
     weeklyOrder = shuffle(selected)
-    对 paperOffset = 0, 1, 2：
+
+    for paperOffset = 0..2:
         paperIndex = weekIndex * 3 + paperOffset
         studentIndexes = weeklyOrder[paperOffset*3 .. paperOffset*3+2]
-        记录 { paperIndex, studentIndexes }
+        暂存 { paperIndex, studentIndexes }
 
-    对 selected 中每个学生下标执行 counts[index] += 1
+    对 selected 中每个学生执行 counts[index] += 1
 
-结束后，若任一 counts[index] 不等于 3：报错
+结束后若任一 counts[index] != 3：失败
 ```
 
-重要的随机消费规则：
+`levels` 是本周开始时的快照；候选数组即使只取前几个也必须完整洗牌，选满 9 人后还要单独洗牌 `selected`。不得依赖集合、对象、语言环境或 DOM 的未规定顺序。
 
-- `levels` 是本周开始时的快照，本周 9 人选完后才增加 `counts`。
-- 每个 `candidates` 必须完整执行 Fisher–Yates，即使最终只会取它的前几项。
-- 候选数组的洗牌先发生；9 人选齐后，再单独洗牌一次 `selected`。
-- 不得用集合或对象的未规定枚举顺序决定候选顺序。
-- 排程函数不得读取系统时间、时区、语言环境、DOM 状态或任何额外随机源。
+## 7. 报告人一对一匹配
 
-## 7. 计划编码
+把第 6 节得到的论文安排按 `paperIndex = 0..N-1` 展平。只使用 `presenters` 随机流。最多尝试 4096 次：
 
-完整计划包含 `N/3` 周和 `N` 篇论文。每篇论文的三名学生按 `weeklyOrder` 中的顺序记录：
+```text
+indexes = [0, 1, ..., N-1]
+
+for attempt = 0 .. 4095:
+    candidate = shuffle(indexes)
+    // candidate[paperIndex] 是该篇论文的候选报告人
+    若对每个 paperIndex 都满足：
+        candidate[paperIndex] 不在该篇 studentIndexes 中
+    则接受 candidate 并停止
+
+若 4096 次均未接受：安全失败，不创建抽签或承诺
+```
+
+被接受的 `candidate` 是一个全排列，因此每篇恰有 1 位报告人、每位学生恰好报告 1 篇。限制只检查“本篇报告人不属于本篇提问人”；同一学生可以提问其他论文。
+
+### 7.1 为什么匹配一定存在
+
+把论文和学生看成二分图。每篇禁止它自己的 3 位提问人；每位学生全程也恰好提问 3 篇，所以允许边构成一个 `(N-3)` 正则二分图。正则二分图满足 Hall 条件，因此至少存在一个覆盖全部论文和学生的完美匹配。
+
+4096 是随机搜索的安全上限，不是“可能不存在匹配”的补丁。若把 SHA-256 流视为理想均匀随机源，每次完整洗牌在所有 `N!` 个排列中均匀；只接受有效排列，因此最终结果在所有有效报告人匹配中均匀。由 van der Waerden 下界，每次成功概率至少为 `((N-3)/N)^N`；在允许的最小规模 `N=9` 也不低于 `(2/3)^9 ≈ 2.60%`。连续 4096 次均失败的理想概率小于 `2×10^-47`。真的触及上限时实现必须停止，不能换用有偏后备算法。
+
+## 8. 计划结构、编码与摘要
+
+每篇计划对象为：
+
+```json
+{
+  "paperIndex": 0,
+  "studentIndexes": [1, 2, 3],
+  "presenterIndex": 4
+}
+```
+
+完整字节编码：
 
 ```text
 PLAN_BYTES =
@@ -229,40 +228,40 @@ PLAN_BYTES =
      || U32BE(studentIndexes[0])
      || U32BE(studentIndexes[1])
      || U32BE(studentIndexes[2])
+     || U32BE(1)
+     || U32BE(presenterIndex)
 
 planDigest = SHA256(D_PLAN || LP(PLAN_BYTES))
 ```
 
-`revealed`、动画状态、当前周、生成时间和操作日志都不属于确定性计划。它们不得影响 `PLAN_BYTES` 或重放结果。
+`U32BE(1)` 是报告人数的显式编码。揭晓状态、当前周、动画和操作日志不属于计划，不能影响摘要。
 
-## 8. 公开承诺凭证
+## 9. 公开承诺凭证
 
-### 8.1 凭证字段
-
-公开凭证精确包含以下字段，不允许额外字段：
+凭证必须精确包含以下字段，不允许额外字段：
 
 ```json
 {
   "format": "paper-question-picker-commitment",
-  "version": 4,
-  "protocolId": "paper-question-picker/v4",
+  "version": 5,
+  "protocolId": "paper-question-picker/v5",
   "normalizationId": "nfc-lines/v1",
-  "rngId": "sha256-ctr-u64be-u32be-reject/v1",
-  "scheduleId": "min-count-fisher-yates/v1",
+  "rngId": "sha256-ctr-split-u64be-u32be-reject/v2",
+  "scheduleId": "min-count-plus-uniform-presenter-matching/v2",
   "issuedAt": "规范 UTC ISO 8601 时间",
   "studentCount": 12,
   "paperCount": 12,
   "papersPerWeek": 3,
   "studentsPerPaper": 3,
   "finalSelectionsPerStudent": 3,
+  "presentersPerPaper": 1,
+  "finalPresentationsPerStudent": 1,
   "inputDigest": "64 位小写十六进制",
   "commitment": "64 位小写十六进制"
 }
 ```
 
-`issuedAt` 必须是 `YYYY-MM-DDTHH:mm:ss.sssZ` 形式，但它只用于绑定显示元数据，不能当作可信时间戳。
-
-### 8.2 承诺公式
+`issuedAt` 必须为 `YYYY-MM-DDTHH:mm:ss.sssZ`。承诺上下文和公式为：
 
 ```text
 CONTEXT_BYTES =
@@ -271,11 +270,13 @@ CONTEXT_BYTES =
  || TEXT(RNG_ID)
  || TEXT(SCHEDULE_ID)
  || TEXT(issuedAt)
- || U32BE(N)
- || U32BE(N)
- || U32BE(3)       // papersPerWeek
- || U32BE(3)       // studentsPerPaper
- || U32BE(3)       // finalSelectionsPerStudent
+ || U32BE(N)   // studentCount
+ || U32BE(N)   // paperCount
+ || U32BE(3)   // papersPerWeek
+ || U32BE(3)   // studentsPerPaper
+ || U32BE(3)   // finalSelectionsPerStudent
+ || U32BE(1)   // presentersPerPaper
+ || U32BE(1)   // finalPresentationsPerStudent
 
 commitment = SHA256(
     D_COMMIT
@@ -285,158 +286,122 @@ commitment = SHA256(
 )
 ```
 
-公开凭证必须通过字段白名单从内部状态构造。它不得包含：
+公开凭证不得包含 seed、随机状态、计划、姓名、论文标题、未来结果或私有备份。`inputDigest` 是未加盐摘要，不等于匿名化；知道候选输入的人仍可离线验证猜测。人工核对应使用完整 64 位 commitment，短码只能辅助辨认。
 
-- `seed` 或其可逆编码；
-- counter、`rngKey`、随机块或拒绝采样记录；
-- 完整计划、尚未揭晓的学生下标或其他未来结果；
-- 私有恢复数据、浏览器存储快照或姓名到匿名 ID 的私有映射。
+## 10. 最终审计报告与验证顺序
 
-`inputDigest` 不直接包含明文，但它是未加盐的输入摘要，不提供加密或匿名性；知道候选名单或论文顺序的人可以离线验证猜测。`commitment` 对 seed 和未来计划的隐藏性依赖 `seed` 确实是不可预测的 32 字节随机量。
+最终报告只能在全部论文已经揭晓且用户此前确认公开了承诺后导出。它精确包含：
 
-学生必须保存完整的公开凭证 JSON，课后验证器需要其中的全部字段。全部 64 位 `commitment` 可用于人工核对，但裸 commitment 或仅显示前 8 位的短码都不能替代完整凭证验证。
-
-## 9. 最终审计报告与验证
-
-最终审计报告只能在全部论文都已揭晓之后导出，并精确包含：
-
-- 报告格式和版本；
-- 规范 UTC ISO 报告生成时间 `completedAt`；
-- 第 8 节的完整原始承诺凭证；
+- `format = paper-question-picker-final-audit`、`version = 5`；
+- 规范 UTC ISO 时间 `completedAt`；
+- 完整原始 `receipt`；
 - 64 位小写十六进制 `seed`；
 - 规范化后的有序 `students` 和 `papers`；
-- 以零基论文下标和学生下标表示的完整计划；
+- 第 8 节的完整零基 `plan`；
 - `planDigest`。
 
-协议与算法标识位于内嵌的原始承诺凭证中，报告顶层不重复这些字段，也不允许其他额外字段。
+独立验证器必须要求分别提供事前凭证和最终报告，并依次：
 
-独立验证器必须让学生分别提供“事前保存的公开凭证”和“最终审计报告”，并按顺序执行：
+1. 严格检查格式、版本、字段白名单、长度和类型；
+2. 确认外部凭证和报告内凭证逐字段相同；
+3. 重算输入规范形及 `inputDigest`；
+4. 检查人数和固定规则字段；
+5. 用报告 seed 重算 commitment；
+6. 从两个域分离随机流重放提问人排程和报告人匹配；
+7. 重算计划编码和 `planDigest`，逐项比较重放计划与报告计划；
+8. 独立检查：论文覆盖一次、周结构正确、同周 9 位提问人不同、每人提问 3 次、报告人是全排列、报告人与本篇提问人不重合；
+9. 明确显示每项结果和完整重放计划。
 
-1. 严格检查两份数据的格式、版本、长度和类型。
-2. 检查报告内凭证与学生事前保存的凭证逐字段一致。
-3. 按第 3 节重新规范化或确认报告输入已经处于规范形，并计算 `inputDigest`。
-4. 检查人数、论文数、固定规则和 `inputDigest` 与凭证一致。
-5. 用报告中的 `seed` 按第 8.2 节重算 `commitment`。
-6. 按第 4 至第 6 节从头重放完整计划。
-7. 按第 7 节重算 `planDigest`，并逐项比较重放计划与报告计划。
-8. 独立检查公平性不变量：每周恰有 3 篇、每篇恰有 3 人、同周 9 人不重复、每篇论文只出现一次、每位学生最终恰好 3 次、所有下标均在范围内。
-9. 显示规范化输入、重放结果、完整摘要和每项检查结果。验证失败时必须给出具体失败项，不能只显示笼统错误。
+只验证报告自带的凭证不能证明它事先存在；必须与学生在揭晓前另行保存的凭证交叉比较。导入 JSON 一律视为不可信数据，应限制大小、数组长度和下标，并安全转义显示内容。
 
-只验证审计报告自己携带的凭证，不能证明凭证在揭晓前已经存在。验证器必须明确提示这一限制。
+## 11. 公开前挑种子与更强流程
 
-`verify.html` 及其同目录脚本、样式可以作为一个完整部署包下载并断网运行；在线使用时，文件内容也只在当前浏览器中处理。验证器不发送文件内容，不使用第三方脚本，不从 URL 查询参数读取 seed 或报告。它必须把导入 JSON 当作不可信数据，限制文件大小和数组长度，并对姓名、标题和错误信息做 HTML 转义。
+本地按钮和承诺流程不能从密码学上阻止控制设备的人在公开前反复生成候选 seed。最低操作要求是：第一次揭晓前将凭证发到外部渠道；任何重新生成都产生全新 seed 和凭证，旧记录保留在历史中。
 
-验证器应保留固定的 v4 实现；将来发布 v5 时不得偷偷改变 v4 的重放规则。生产排程器和独立验证器最好有两份独立实现，并由固定测试向量交叉验证。
+若还要抵御单方挑种子，需要在事先承诺组织者私密量后，引入组织者无法提前预测或单方控制的公开随机贡献，再用带域分离的 SHA-256 合成最终 seed。贡献来源、截止时间、顺序及拒绝披露规则必须在抽签前约定。基础 v5 不声称提供这项更强保证。
 
-## 10. 重生成与公开前挑种子
+## 12. 本地存储、备份和隐私
 
-本地界面可以减少误操作，但不能从密码学上阻止组织者在公开承诺前执行以下行为：生成 seed、查看计划、不满意就删除状态并重来。即使按钮被禁用，有设备控制权的人仍可修改代码或清除浏览器数据。
+未完成时，seed 与完整预排计划都能暴露未来结果，必须视为秘密。三类文件必须区分：
 
-最低要求：
+- 公开承诺凭证：无 seed、姓名和未来计划，可在揭晓前公开；
+- 私有完整备份：含姓名、seed、未揭晓计划和历史，只能放在可信位置；
+- 最终审计报告：含实名输入、seed 和完整计划，只在全部完成后向合适的班级范围分享。
 
-- 第一次揭晓前明确要求组织者把承诺发送到外部群聊等渠道。
-- 新建抽签必须产生新的凭证；重置前应把旧记录保留在历史存档中，不得原地覆盖旧承诺。
-- 页面和验证器必须说明：v4 基础流程只提供发布后的防篡改证据，不证明 seed 未经筛选。
+GitHub Pages 的 `localStorage` 按 origin 而不是路径隔离；同一 `zjwulbx.github.io` origin 下的其他页面理论上可以读取这些本地数据。页面不应加载第三方分析脚本；长期保存未公开结果时，建议使用受控设备、独立域名或妥善保管的私有备份。
 
-如需抵御单方挑种子，应采用两阶段流程：
+## 13. 兼容与迁移
 
-1. 组织者生成 32 字节私密量 `organizerSecret`，先公开
-   `SHA256(UTF8("paper-question-picker/organizer-commit/v4\0") || inputDigest || organizerSecret)`。
-2. 在该承诺已有外部时间证据之后，取得组织者此前无法预测的公开随机量 `beacon`，例如多人现场贡献或预先约定时刻的公开随机源。
-3. 计算
-   `seed = SHA256(UTF8("paper-question-picker/final-seed/v4\0") || organizerSecret || inputDigest || LP(beacon))`。
-4. 最终报告同时公开 `organizerSecret` 和规范化的 `beacon`，验证器检查两阶段关系。
+- v1–v3 没有完整 seed、版本化算法和事前承诺，只能标为旧版不可重放；
+- v4 凭证、报告和私有安排必须继续由冻结的 v4 实现验证；v4 只含提问人，不能事后添加未被原承诺锁定的报告人；
+- v5 使用新的存储 key。读取旧数据后可复制为新容器，但不得删除或改写旧 key；迁移失败时必须停止覆盖；
+- 私有备份导入后，必须从相应版本的 seed 和规范输入重算承诺与完整计划，不能信任备份携带的计划；
+- 同一逻辑抽签在多个标签页或设备上分叉时，只能在所有已揭晓结果都与同一重放计划一致的前提下合并揭晓进度。
 
-只要至少有一个在第一阶段之后产生、未被组织者预知的诚实随机贡献，组织者就不能单方预筛最终 seed。实际流程还必须事先规定贡献顺序、截止时间以及最后贡献者拒绝披露时的处理办法。基础 v4 不默认声称提供这项更强保证。
+## 14. 最低验收清单
 
-## 11. 本地存储、备份与隐私
+发布实现至少应满足：
 
-未完成抽签时，`seed` 可以推导全部未来结果，必须视为秘密。完整预排计划具有同样敏感性。
+- 没有 Web Crypto 时生成失败，代码中不存在 `Math.random()` 回退；
+- v5 固定向量在生产实现与独立实现中逐字节一致；
+- 对多个 `N` 和至少 10,000 个固定 seed 交叉重放，提问与报告全部不变量成立；
+- 更改 seed、输入顺序、角色下标、算法标识、时间或摘要任一项，验证失败；
+- 报告人匹配使用独立随机流；重试次数不影响提问人计划；
+- 未确认承诺时不能揭晓，未完成时不能导出最终报告；
+- 公开凭证自动确认不含 seed、姓名、论文标题或计划；
+- 验证器拒绝混用 v4/v5 文件，并保留 v4 固定向量；
+- 超大 JSON、坏十六进制、未知字段、越界下标、原型键和 HTML 名称都安全失败或安全显示；
+- v1–v4 迁移中断不会覆盖原数据，重复迁移不会制造重复历史。
 
-当前 GitHub Pages 项目地址位于 `zjwulbx.github.io` 源下。浏览器存储按 origin 隔离，不按路径隔离，因此同一账号下其他 `zjwulbx.github.io/...` Pages 项目的 JavaScript 也能读取同一 `localStorage`。CSP 不能阻止另一个同源页面读取该存储。若要在浏览器中长期保存明文 seed，部署方应使用只承载本应用的独立域名或子域；否则应使用仅内存状态，或由用户口令保护的加密私有恢复数据。
+## 15. v5 固定测试向量
 
-文件类型必须清楚分开：
-
-- **公开承诺凭证**：不含 seed 和未来计划，可以在揭晓前公开。
-- **私有恢复备份**：为了跨设备继续未完成抽签，可能包含 seed；必须显著标记“机密”，最好使用带随机 salt、版本化 KDF 参数和认证加密的口令加密格式。
-- **最终审计报告**：含 seed、完整输入和完整计划，只能在全部揭晓后由用户明确确认导出。
-
-不得把私有恢复备份包装成看似可公开的“普通完整备份”。seed 不得进入 URL、控制台日志、分析服务、错误上报、公开 DOM 属性或公开剪贴板内容。应用不应加载第三方分析脚本。
-
-最终审计报告可能包含学生姓名、论文标题和完整分配关系，属于班级隐私数据，不应自动上传或默认公开。需要公开互联网审计时，建议从一开始就以随机、不含姓名的参与者 ID 和论文 ID 作为协议输入，并把实名映射通过班级内渠道单独提供。姓名的普通散列不是可靠匿名化。
-
-## 12. 旧版历史与迁移
-
-v1、v2、v3 没有保存本规范的 32 字节 seed、输入摘要、算法版本和事前承诺，无法还原为可重放的 v4 记录。
-
-迁移时必须：
-
-- 原样保留旧记录可恢复的已揭晓内容；
-- 明确标记为 `legacy-unverifiable` 或等价状态；
-- 不得为旧记录伪造 seed、承诺或“验证通过”状态；
-- 不得把旧记录中的未揭晓预排计划放入公开承诺或公开审计报告；
-- 使用新的存储版本或 key，以“复制、校验、提交”方式迁移；失败时不得覆盖或删除旧数据，重复执行迁移必须幂等。
-
-v4 私有备份导入后，应用必须从 seed 和规范化输入重新计算 `inputDigest`、`commitment` 和完整计划，不能直接信任备份中的计划。相同承诺在多个标签页或设备上的进度发生分叉时，只能在每个已揭晓结果都与重放计划一致的前提下合并进度，不能仅按本机时间戳覆盖。
-
-## 13. 最低验收清单
-
-发布 v4 前至少应满足：
-
-- 固定一个包含中文、组合字符、emoji、CRLF 和边界空白的测试向量；Chrome、Firefox、Safari 和独立参考实现得到完全相同的 `inputDigest`、`commitment`、最初随机块、拒绝采样序列、完整计划和 `planDigest`。
-- 覆盖 `uniform(1)`、`uniform(2)`、`uniform(3)`、`uniform(9)`、`uniform(255)`、`uniform(256)`、`uniform(257)` 和被强制拒绝的边界值。
-- seed、输入、顺序、算法标识、时间、规则、承诺或计划任意改变一个字节，验证必须失败。
-- 无 Web Crypto 时生成失败，代码中不存在 `Math.random()` 回退路径。
-- 公开凭证经自动扫描确认不含 seed、随机状态或任何未揭晓学生分配。
-- 未完成时不能导出最终审计报告；私有恢复文件有清晰的机密提示，计划、种子或承诺被篡改时必须安全失败。若未来增加口令加密，错误口令也必须安全失败。
-- 验证器要求单独输入学生事前保存的凭证；只给最终报告时不得声称已证明事前承诺。
-- 验证器断网可用，对超大 JSON、未知版本、坏十六进制、越界下标、原型键和含 HTML 的姓名安全失败。
-- 使用不同实现对多个 `N` 和至少 10,000 个固定 seed 交叉重放，结果逐字节一致且全部公平性不变量成立。
-- v1 至 v3 迁移后仍明确显示“旧版、不可重放验证”；迁移中断不得覆盖或删除旧数据，重试不产生重复记录。
-
-## 14. 已发布固定测试向量
-
-以下向量用于让第三方实现逐字节核对 v4。学生依次为 `学生1` 至 `学生12`，论文依次为 `论文1` 至 `论文12`；两个数组均按数字升序排列。其他输入为：
+学生依次为 `学生1` 至 `学生9`，论文依次为 `论文1` 至 `论文9`；数组按数字升序。其他输入：
 
 ```text
-seed     = 0000000000000000000000000000000000000000000000000000000000000000
-issuedAt = 2026-09-09T00:00:00.000Z
+seed     = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+issuedAt = 2026-01-02T03:04:05.678Z
 ```
 
-预期摘要与随机流开头为：
+预期值：
 
 ```text
-inputDigest = c405489f4ec183129f2cde38e2807d80b59cf41631db27e152b0a565ea9e551b
-commitment  = a7742f176fd52f6fc25d27d43d551fe55b2f5001af489ea5882429fccde5f61b
-planDigest  = 93f49494657ed4e2bd29578f96535488638f7b31df5dd98d5ee131ede04f1394
-前四个 U32 = 66490067, 1330020163, 3924755527, 3067868633
+inputDigest = 78dd869a9a7877654d775ee55be603fd42fce918cc383b38ba2181c00da0e797
+commitment  = 52cb054d505b1c4926234a0800f3027277bc5f5b3dc8b05ceae7064b9aa293ff
+planDigest  = 56c4c51452aacd566e6f8ba1f69db2046af9076aa1e9441826b970bc437ebc1a
+questions 流前四个 U32 = 2057970536, 1889911843, 1050146633, 450919913
+presenters 流前四个 U32 = 3865904066, 2807744475, 773126469, 2778001887
 ```
 
-完整计划使用协议规定的零基下标：
+完整计划：
 
 ```json
 {
   "weeks": [
     {"weekIndex": 0, "assignments": [
-      {"paperIndex": 0, "studentIndexes": [5, 3, 4]},
-      {"paperIndex": 1, "studentIndexes": [1, 6, 9]},
-      {"paperIndex": 2, "studentIndexes": [2, 8, 0]}
+      {"paperIndex": 0, "studentIndexes": [5, 4, 8], "presenterIndex": 7},
+      {"paperIndex": 1, "studentIndexes": [6, 0, 3], "presenterIndex": 2},
+      {"paperIndex": 2, "studentIndexes": [1, 7, 2], "presenterIndex": 3}
     ]},
     {"weekIndex": 1, "assignments": [
-      {"paperIndex": 3, "studentIndexes": [5, 7, 9]},
-      {"paperIndex": 4, "studentIndexes": [2, 1, 10]},
-      {"paperIndex": 5, "studentIndexes": [6, 11, 4]}
+      {"paperIndex": 3, "studentIndexes": [1, 8, 7], "presenterIndex": 5},
+      {"paperIndex": 4, "studentIndexes": [0, 4, 2], "presenterIndex": 6},
+      {"paperIndex": 5, "studentIndexes": [3, 5, 6], "presenterIndex": 0}
     ]},
     {"weekIndex": 2, "assignments": [
-      {"paperIndex": 6, "studentIndexes": [0, 8, 6]},
-      {"paperIndex": 7, "studentIndexes": [10, 3, 1]},
-      {"paperIndex": 8, "studentIndexes": [4, 11, 7]}
-    ]},
-    {"weekIndex": 3, "assignments": [
-      {"paperIndex": 9, "studentIndexes": [7, 0, 3]},
-      {"paperIndex": 10, "studentIndexes": [5, 2, 10]},
-      {"paperIndex": 11, "studentIndexes": [9, 8, 11]}
+      {"paperIndex": 6, "studentIndexes": [0, 4, 8], "presenterIndex": 1},
+      {"paperIndex": 7, "studentIndexes": [5, 3, 2], "presenterIndex": 8},
+      {"paperIndex": 8, "studentIndexes": [1, 7, 6], "presenterIndex": 4}
     ]}
   ]
 }
+```
+
+## 16. v4 冻结兼容向量
+
+v4 的完整定义见 [ALGORITHM-v4.md](ALGORITHM-v4.md)。学生、论文依次为 `学生1..学生12`、`论文1..论文12`，seed 全零，`issuedAt = 2026-09-09T00:00:00.000Z` 时，必须继续得到：
+
+```text
+inputDigest = c405489f4ec183129f2cde38e2807d80b59cf41631db27e152b0a565ea9e551b
+commitment  = a7742f176fd52f6fc25d27d43d551fe55b2f5001af489ea5882429fccde5f61b
+planDigest  = 93f49494657ed4e2bd29578f96535488638f7b31df5dd98d5ee131ede04f1394
 ```
