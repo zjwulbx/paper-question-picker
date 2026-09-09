@@ -1,12 +1,12 @@
-# 论文报告与提问抽签 v7 算法与审计协议
+# 论文报告与提问抽签 v6 算法与审计协议
 
-本文定义 v7 的规范输入、字符串域分隔、规范 JSON、确定性随机流、循环角色排程、事前承诺和事后验证格式。文中的“必须”“不得”“应当”是协议要求；实现若改变任何会影响输入摘要、随机字节、计划或承诺的步骤，必须使用新的协议或算法版本号。
+本文定义 v6 的规范输入、字符串域分隔、规范 JSON、确定性随机流、提问人排程、报告人匹配、事前承诺和事后验证格式。文中的“必须”“不得”“应当”是协议要求；实现若改变任何会影响输入摘要、随机字节、计划或承诺的步骤，必须使用新的协议或算法版本号。
 
-v4、v5 与 v6 已冻结并继续受支持。v4 只分配提问人，完整规范见 [ALGORITHM-v4.md](ALGORITHM-v4.md)；v5 固定每周 3 篇并增加报告人，完整规范见 [ALGORITHM-v5.md](ALGORITHM-v5.md)；v6 支持每周 3 或 4 篇并只禁止同篇角色重合，完整规范见 [ALGORITHM-v6.md](ALGORITHM-v6.md)。任何实现都不得用 v7 规则重新解释或补写旧凭证、旧报告和旧计划。
+v4 与 v5 已冻结并继续受支持。v4 只分配提问人，完整规范见 [ALGORITHM-v4.md](ALGORITHM-v4.md)；v5 固定每周 3 篇并增加报告人，完整规范见 [ALGORITHM-v5.md](ALGORITHM-v5.md)。任何实现都不得用 v6 规则重新解释或补写旧凭证、旧报告和旧计划。
 
 ## 1. 规则与保证边界
 
-设规范化后的学生数为 `N`。v7 输入不再是一条没有周次信息的论文列表，而是有序的 `courseWeeks`；每个元素包含一个周标题和该周有效论文：
+设规范化后的学生数为 `N`。v6 输入不再是一条没有周次信息的论文列表，而是有序的 `courseWeeks`；每个元素包含一个周标题和该周有效论文：
 
 ```json
 {
@@ -22,12 +22,12 @@ v4、v5 与 v6 已冻结并继续受支持。v4 只分配提问人，完整规�
 - 每篇论文有 3 位提问人，同一周所有提问人互不重复；
 - 每位学生在全部课程中恰好提问 3 次；
 - 每篇论文有 1 位报告人，每位学生在全部课程中恰好报告 1 篇；
-- 同一周的全部报告人与全部提问人互不重复；一名学生一周最多承担一个角色；
-- 报告人仍可在其他周担任提问人，因此每人全程恰好报告 1 次、提问 3 次。
+- 一篇论文的报告人不得是该篇的 3 位提问人；
+- 报告人可以提问其他论文，包括同一周内的其他论文。禁止的是同篇角色重合和同一学生报告多篇，不是报告角色与所有提问角色全局互斥。
 
 学生持有第一次揭晓前另行保存的公开承诺凭证、全部结束后的最终审计报告和独立验证器时，可以重算完整计划，核对课程表、种子、提问人和报告人是否与事前承诺一致。
 
-v7 能证明的是：一份已经公开并由参与者保存的承诺，在公开之后没有被换成另一份规范输入、随机种子或完整计划。它单独不能证明：
+v6 能证明的是：一份已经公开并由参与者保存的承诺，在公开之后没有被换成另一份规范输入、随机种子或完整计划。它单独不能证明：
 
 - `issuedAt` 对应真实可信的外部时间；它只是运行设备自报的 UTC 时间；
 - 组织者在公开凭证前没有反复生成并挑选候选种子；
@@ -38,25 +38,25 @@ v7 能证明的是：一份已经公开并由参与者保存的承诺，在公�
 
 ## 2. 固定标识与字符串散列
 
-v7 使用以下精确 ASCII 标识：
+v6 使用以下精确 ASCII 标识：
 
 ```text
-PROTOCOL_ID      = paper-question-picker/v7
+PROTOCOL_ID      = paper-question-picker/v6
 NORMALIZATION_ID = nfc-course-table/v2
 RNG_ID           = sha256-ctr-split-hex-u64be-u32be-reject/v3
-SCHEDULE_ID      = variable-week-cyclic-weekly-disjoint-roles/v1
+SCHEDULE_ID      = variable-week-min-count-plus-uniform-presenter-matching/v1
 ```
 
 域分隔字符串如下；每个末尾的 `\0` 表示一个实际的 `U+0000` 字符，其 UTF-8 编码为单字节 `0x00`：
 
 ```text
-D_INPUT               = "paper-question-picker/input/v7\0"
-D_COMMIT              = "paper-question-picker/commitment/v7\0"
-D_QUESTION_RNG_KEY    = "paper-question-picker/rng-key/questions/v7\0"
-D_QUESTION_RNG_BLOCK  = "paper-question-picker/rng-block/questions/v7\0"
-D_PRESENTER_RNG_KEY   = "paper-question-picker/rng-key/presenters/v7\0"
-D_PRESENTER_RNG_BLOCK = "paper-question-picker/rng-block/presenters/v7\0"
-D_PLAN                = "paper-question-picker/plan/v7\0"
+D_INPUT               = "paper-question-picker/input/v6\0"
+D_COMMIT              = "paper-question-picker/commitment/v6\0"
+D_QUESTION_RNG_KEY    = "paper-question-picker/rng-key/questions/v6\0"
+D_QUESTION_RNG_BLOCK  = "paper-question-picker/rng-block/questions/v6\0"
+D_PRESENTER_RNG_KEY   = "paper-question-picker/rng-key/presenters/v6\0"
+D_PRESENTER_RNG_BLOCK = "paper-question-picker/rng-block/presenters/v6\0"
+D_PLAN                = "paper-question-picker/plan/v6\0"
 ```
 
 定义：
@@ -65,7 +65,7 @@ D_PLAN                = "paper-question-picker/plan/v7\0"
 HASH_TEXT(s) = lowercase_hex(SHA256(UTF8(s)))
 ```
 
-其中 `UTF8` 无 BOM；含未配对 UTF-16 代理项的字符串必须拒绝。`HASH_TEXT` 返回 64 个小写十六进制字符。与 v4/v5 的部分二进制拼接不同，v7 公式明确对域字符串、规范 JSON、种子十六进制文本和摘要十六进制文本进行字符串连接，再统一编码为 UTF-8。实现不得把 `seedHex`、`inputDigestHex` 或 PRNG key 的十六进制文本先解码为原始字节。
+其中 `UTF8` 无 BOM；含未配对 UTF-16 代理项的字符串必须拒绝。`HASH_TEXT` 返回 64 个小写十六进制字符。与 v4/v5 的部分二进制拼接不同，v6 公式明确对域字符串、规范 JSON、种子十六进制文本和摘要十六进制文本进行字符串连接，再统一编码为 UTF-8。实现不得把 `seedHex`、`inputDigestHex` 或 PRNG key 的十六进制文本先解码为原始字节。
 
 ## 3. 文本规范化与课程表输入
 
@@ -92,23 +92,23 @@ HASH_TEXT(s) = lowercase_hex(SHA256(UTF8(s)))
 并满足：
 
 - `students` 和 `courseWeeks` 都是数组；
-- `12 <= students.length <= 10000`；
+- `9 <= students.length <= 10000`；
 - 学生姓名规范化后全局唯一；
 - `1 <= courseWeeks.length <= 10000`，每周对象只允许 `label`、`papers` 两个字段；
 - 周标题规范化后全局唯一；
 - 每周 `papers.length` 严格等于 3 或 4；
 - 所有有效论文标题规范化后全局唯一；
 - 全部 `papers.length` 之和严格等于学生数 `N`；
-- `4 × max(papers.length) <= N`，从而本周的报告人与提问人可以全部不同；
+- `3 × max(papers.length) <= N`，从而本周所需提问人可以全部不同；
 - 下节定义的规范输入 JSON 的 UTF-8 长度不超过 8 MiB。
 
-协议不要求 `N` 是 3 的倍数。全为 3 篇周时至少需要 12 人；只要包含 4 篇论文的周次，就至少需要 16 人。当前 48 人、每周 3 或 4 篇的课程表满足条件。
+协议不要求 `N` 是 3 的倍数。若包含 4 篇论文的周次，则上述同周不重复约束自然要求 `N >= 12`。
 
 网页可接受三列 Tab 分隔的课程表，列含义为“周次/日期、论文标题、状态”。状态为空、`正常` 或 `有效` 的行会进入 `courseWeeks`；状态为 `取消` 的行会在调用审计核心前被排除。原始 Tab、状态文字、取消行和原始行号不属于协议输入，只有规范化后的有序 `courseWeeks` 被承诺。
 
 ## 4. 规范 JSON
 
-v7 的散列依赖协议定义的规范对象和 ECMAScript `JSON.stringify` 结果。验证器先检查来件 JSON 的字段白名单、类型和约束，再按本节给出的键序重建新的规范对象，最后散列。因此，导入文件的缩进、键间空白和对象键的原始排列都不影响验证；数组顺序仍然是协议数据。本文将规范对象的序列化结果记为 `JSON_V7(value)`：
+v6 的散列依赖协议定义的规范对象和 ECMAScript `JSON.stringify` 结果。验证器先检查来件 JSON 的字段白名单、类型和约束，再按本节给出的键序重建新的规范对象，最后散列。因此，导入文件的缩进、键间空白和对象键的原始排列都不影响验证；数组顺序仍然是协议数据。本文将规范对象的序列化结果记为 `JSON_V6(value)`：
 
 - UTF-8 编码前不含 BOM、缩进、换行或键间空格；
 - 数组顺序原样保留；
@@ -132,7 +132,7 @@ label, papers
 因此：
 
 ```text
-CANONICAL_INPUT_JSON = JSON_V7({students: [...], courseWeeks: [...]})
+CANONICAL_INPUT_JSON = JSON_V6({students: [...], courseWeeks: [...]})
 inputDigestHex       = HASH_TEXT(D_INPUT || CANONICAL_INPUT_JSON)
 ```
 
@@ -172,7 +172,7 @@ block      = 将 blockHex 每两个十六进制字符解码为一个字节
 
 随机字节流为 `block(0) || block(1) || ...`。每生成一块，低 32 位加一并向高 32 位进位；counter 超过 `2^64-1` 时必须停止。`nextUint32()` 连续读取 4 个随机字节，并按无符号大端整数解释。
 
-两条独立随机流分别决定学生到角色档案的排列，以及三位提问人的显示顺序。任何随机消费顺序的变化都必须升级协议版本。
+独立随机流保证报告人匹配尝试次数不会改变提问人安排。
 
 ## 6. 无偏整数与洗牌
 
@@ -197,48 +197,78 @@ return A
 
 长度 0 或 1 的数组不消耗随机字节。
 
-## 7. 循环角色排程
+## 7. 提问人排程
 
-论文按 `courseWeeks` 及每周 `papers` 的输入顺序取得连续的全局零基 `paperIndex`。设 `K` 为单周最大论文数。v7 先使用 `presenters` 随机流对全部学生下标做一次 Fisher–Yates 洗牌，得到均匀随机排列 `roleOrder`；再使用 `questions` 随机流洗牌三个固定偏移 `[K, 2K, 3K]`，只随机决定三个提问位置的显示顺序。
+只使用 `questions` 随机流。论文按 `courseWeeks` 及每周 `papers` 的输入顺序取得连续的全局零基 `paperIndex`：
 
 ```text
-N = students.length
-K = max(courseWeeks[*].papers.length)
-indexes = [0, 1, ..., N-1]
-roleOrder = presenterRandom.shuffle(indexes)
-questionOffsets = questionRandom.shuffle([K, 2K, 3K])
+counts = 长度 N、初值全 0
+weeks = []
+paperCursor = 0
 
-for paperIndex = 0 .. N-1:
-    presenterIndex = roleOrder[paperIndex]
-    studentIndexes = questionOffsets.map(offset =>
-        roleOrder[(paperIndex + offset) mod N]
-    )
+for weekIndex = 0 .. courseWeeks.length-1:
+    weekSize = courseWeeks[weekIndex].papers.length
+    needed = 3 * weekSize
+    selected = []
+    levels = counts 在本周开始时的不同值，按数字升序
+
+    for level in levels:
+        candidates = 按学生下标 0..N-1 升序扫描，
+                     取 counts[index] == level 的下标
+        candidates = shuffle(candidates)
+        从头追加到 selected，直到 candidates 用完或 selected 长度为 needed
+        若 selected 长度为 needed：结束 levels 循环
+
+    若 selected 长度不为 needed：失败
+    weeklyOrder = shuffle(selected)
+
+    for paperOffset = 0 .. weekSize-1:
+        assignment = {
+            paperIndex: paperCursor + paperOffset,
+            studentIndexes: weeklyOrder[paperOffset*3 .. paperOffset*3+2],
+            presenterIndex: null
+        }
+
+    对 selected 中每个学生执行 counts[index] += 1
+    paperCursor += weekSize
+
+结束后若 paperCursor != N 或任一 counts[index] != 3：失败
 ```
 
-assignment 仍按周次与论文输入顺序写入计划。算法没有搜索、回溯或随机重试；通过输入校验后，时间复杂度和额外空间复杂度均为 `O(N)`。
+`levels` 是本周开始时的快照。每层候选数组即使只需取其中一部分，也必须完整洗牌；选满后还要单独洗牌 `selected`，再连续切成三人小组。不得依赖对象、集合、语言环境或 DOM 的未规定遍历顺序。
 
-### 7.1 约束为何同时成立
+### 7.1 次数为何恰好均衡
 
-报告位置使用 `roleOrder[paperIndex]`，因此每位学生恰好报告一次。三个提问层分别是 `roleOrder` 的三个循环平移；每个平移都是一个全排列，因此每位学生在每个提问层出现一次，总计恰好提问三次。
+初始所有 `counts` 都为 0。每周只从最低计数层开始选，并且每名学生在一周最多入选一次。归纳可得，每周结束时任意两名学生的累计次数之差不超过 1。全部有效论文恰好为 `N` 篇，总提问名额为 `3N`，平均值恰好为 3；因此最终所有学生都恰好提问 3 次。
 
-一周的论文在全局下标中构成长度不超过 `K` 的连续区间 `I`。本周报告人和三个提问层分别来自循环区间 `I`、`I+K`、`I+2K`、`I+3K`。输入条件 `N >= 4K` 保证这四个区间两两不相交，所以：
+同一计数层中的学生通过无偏洗牌决定是否被选，选中者又通过一次无偏洗牌决定被分到哪篇论文及组内位置。该规则对同一计数层中的学生对称，但它不是从“所有满足最终约束的完整提问计划”中做全局均匀抽样，页面和规范不得作此声称。
 
-- 同一篇论文的四名参与者互不重复；
-- 同一周所有提问人互不重复；
-- 同一周的全部报告人与全部提问人互不重复；
-- 一名学生一周最多承担一个角色。
+## 8. 报告人一对一匹配
 
-### 7.2 公平性边界
+把第 7 节得到的 assignment 按全局 `paperIndex = 0..N-1` 展平。只使用 `presenters` 随机流，最多尝试 4096 次：
 
-若随机流视为理想均匀随机源，`roleOrder` 在全部 `N!` 个学生排列上均匀。因此任一学生进入任一报告槽或任一有序提问槽的边际概率都是 `1/N`，所有学生的全程总次数完全相同。
+```text
+indexes = [0, 1, ..., N-1]
 
-该构造是在“学生姓名到固定循环角色档案”的映射上均匀，并不是从所有满足约束的完整计划中做全局均匀抽样；网页和规范不得作后一种声称。固定偏移会在不同论文之间形成公开、可复核的结构相关性，但不会使某个姓名获得不同的槽位概率。
+for attempt = 0 .. 4095:
+    candidate = shuffle(indexes)
+    // candidate[paperIndex] 是该篇论文的候选报告人
+    若每个 paperIndex 都满足：
+        candidate[paperIndex] 不在该篇 studentIndexes 中
+    则接受 candidate 并停止
 
-## 8. 可行性与失败边界
+若 4096 次均未接受：失败，不创建抽签或承诺
+```
 
-一周若有 `k` 篇论文，就需要 `k` 位报告人和 `3k` 位提问人同时互不重复，因此必要条件是 `N >= 4k`。对所有周取最大值得到 `N >= 4K`。第 7 节的循环构造证明该条件也充分。
+接受的 candidate 是全排列，因此每篇恰有 1 位报告人，每位学生恰好报告 1 篇。报告人只需避开本篇 3 位提问人；其在其他论文中担任提问人是允许的。
 
-不满足条件的输入必须在创建随机流和生成承诺前以 `INVALID_INPUT` 拒绝；满足条件的规范输入不允许再以“匹配重试耗尽”等原因随机失败。v7 不包含 v6 的 4096 次报告人拒绝采样。
+### 8.1 存在性、均匀性和重试上限
+
+把论文和学生看成二分图。每篇论文禁止它自己的 3 位提问人；每名学生最终也恰好提问 3 篇。因此允许边构成一个 `(N-3)` 正则二分图。正则二分图满足 Hall 条件，所以至少存在一个覆盖全部论文和学生的完美匹配。
+
+若 SHA-256 流视为理想均匀随机源，每次 Fisher–Yates 在所有 `N!` 个排列中均匀；拒绝无效排列后，成功结果在所有有效报告人匹配中均匀。由 van der Waerden 下界，每次成功概率至少为 `((N-3)/N)^N`。允许的最小规模 `N=9` 时不低于 `(2/3)^9 ≈ 2.60%`，4096 次均失败的理想概率小于 `2×10^-47`；对 `N=48`，下界约为 `4.5146%`，4096 次均失败的上界约为 `6.63×10^-83`。
+
+4096 是随机搜索的安全上限。真的触及上限时必须停止，不能切换到确定性或有偏的后备匹配算法。
 
 ## 9. 计划结构与计划摘要
 
@@ -269,10 +299,10 @@ week:       weekIndex, assignments
 assignment: paperIndex, studentIndexes, presenterIndex
 ```
 
-每周 assignment 数必须等于对应 `courseWeeks[weekIndex].papers.length`；每个 `studentIndexes` 必须恰有 3 个合法下标；全局论文下标必须按输入顺序从 0 连续到 `N-1`。计划还必须独立通过每人提问 3 次、报告人全排列、同周提问唯一，以及同周报告人与提问人集合不相交检查。
+每周 assignment 数必须等于对应 `courseWeeks[weekIndex].papers.length`；每个 `studentIndexes` 必须恰有 3 个合法下标；全局论文下标必须按输入顺序从 0 连续到 `N-1`。计划还必须独立通过同周不重复、每人提问 3 次、报告人全排列和同篇角色不重合检查。
 
 ```text
-CANONICAL_PLAN_JSON = JSON_V7(canonicalPlan(plan))
+CANONICAL_PLAN_JSON = JSON_V6(canonicalPlan(plan))
 planDigestHex       = HASH_TEXT(D_PLAN || CANONICAL_PLAN_JSON)
 ```
 
@@ -305,10 +335,10 @@ planDigestHex       = HASH_TEXT(D_PLAN || CANONICAL_PLAN_JSON)
 
 ```json
 {
-  "protocolId": "paper-question-picker/v7",
+  "protocolId": "paper-question-picker/v6",
   "normalizationId": "nfc-course-table/v2",
   "rngId": "sha256-ctr-split-hex-u64be-u32be-reject/v3",
-  "scheduleId": "variable-week-cyclic-weekly-disjoint-roles/v1",
+  "scheduleId": "variable-week-min-count-plus-uniform-presenter-matching/v1",
   "issuedAt": "规范 UTC ISO 8601 时间",
   "studentCount": 48,
   "paperCount": 48,
@@ -326,7 +356,7 @@ planDigestHex       = HASH_TEXT(D_PLAN || CANONICAL_PLAN_JSON)
 承诺公式为：
 
 ```text
-CONTEXT_JSON = JSON_V7(context)
+CONTEXT_JSON = JSON_V6(context)
 commitment   = HASH_TEXT(
     D_COMMIT
  || CONTEXT_JSON
@@ -340,11 +370,11 @@ commitment   = HASH_TEXT(
 ```json
 {
   "format": "paper-question-picker-commitment",
-  "version": 7,
-  "protocolId": "paper-question-picker/v7",
+  "version": 6,
+  "protocolId": "paper-question-picker/v6",
   "normalizationId": "nfc-course-table/v2",
   "rngId": "sha256-ctr-split-hex-u64be-u32be-reject/v3",
-  "scheduleId": "variable-week-cyclic-weekly-disjoint-roles/v1",
+  "scheduleId": "variable-week-min-count-plus-uniform-presenter-matching/v1",
   "issuedAt": "规范 UTC ISO 8601 时间",
   "studentCount": 48,
   "paperCount": 48,
@@ -368,7 +398,7 @@ commitment   = HASH_TEXT(
 ```json
 {
   "format": "paper-question-picker-final-audit",
-  "version": 7,
+  "version": 6,
   "completedAt": "规范 UTC ISO 8601 时间",
   "receipt": {},
   "seed": "64 位小写十六进制",
@@ -399,7 +429,7 @@ commitment   = HASH_TEXT(
 4. 确认 receipt 的人数、周数和 `weekPaperCounts` 与规范输入一致；
 5. 重算 `inputDigestHex`；
 6. 用 report 中的 `seedHex` 重算 commitment；
-7. 从两条域分离随机流重放完整循环角色排程；
+7. 从两条域分离随机流重放提问人排程和报告人匹配；
 8. 严格检查 report 中计划的结构与所有角色不变量；
 9. 重算报告计划和重放计划各自的 `planDigestHex`，同时比较规范计划 JSON；
 10. 展示完整重放计划，供参与者与课堂截图或记录逐项核对。
@@ -410,17 +440,17 @@ commitment   = HASH_TEXT(
 
 ## 14. 公平性与密码学边界
 
-v7 的“无偏”有明确范围：
+v6 的“无偏”有明确范围：
 
 - `uniform(n)` 通过拒绝取模消除整数取模偏差；
 - Fisher–Yates 在理想随机字节模型下给出均匀排列；
-- `roleOrder` 在全部学生排列中均匀；
-- 任一学生进入任一报告槽或有序提问槽的边际概率相同；
-- 每人全程恰好报告 1 次、提问 3 次，且一周最多承担一个角色。
+- 同一累计次数层中的学生被对称处理；
+- 已选学生在当周论文与组内位置之间均匀洗牌；
+- 报告人成功结果在全部有效一一匹配中均匀。
 
-v7 不声称完整计划在所有满足约束的排程中全局均匀。循环角色档案是一项公开、确定且可重放的构造，它优先保证总次数完全相同和同周工作不叠加。
+v6 不声称提问计划在所有满足约束的完整计划中全局均匀。最低次数优先是一项公开、确定且可重放的平衡策略，它有意限制计划分布来保证任意前缀中的累计次数尽量接近。
 
-基础 v7 也不能阻止掌握设备的人在公开前反复生成不同 seed 并挑选结果。若要抵御单方挑种子，需要事先承诺组织者私密量，再引入组织者无法提前预测或单方控制的外部随机贡献，并提前约定贡献顺序、截止时间和拒绝披露规则；这属于更强的多方随机流程，不是基础 v7 的默认保证。
+基础 v6 也不能阻止掌握设备的人在公开前反复生成不同 seed 并挑选结果。若要抵御单方挑种子，需要事先承诺组织者私密量，再引入组织者无法提前预测或单方控制的外部随机贡献，并提前约定贡献顺序、截止时间和拒绝披露规则；这属于更强的多方随机流程，不是基础 v6 的默认保证。
 
 ## 15. 存储、备份与隐私
 
@@ -436,14 +466,13 @@ v7 不声称完整计划在所有满足约束的排程中全局均匀。循环�
 
 - v1–v3 没有完整 seed、版本化算法和事前承诺，只能作为旧进度查看或恢复，不能补造成可重放记录；
 - v4 必须继续由冻结的 v4 实现验证，只含提问人，不能事后添加报告人；
-- v5 必须继续由冻结的 v5 实现验证，固定每周 3 篇；不能按 v7 的 `courseWeeks` 重新分周；
-- v6 必须继续由冻结的 v6 实现验证；v6 允许报告人在同周另一篇论文担任提问人，不得用 v7 新规则拒绝其既有凭证；
-- v7 加载 v6 核心作为旧协议实现，并只对 `version = 7`、`protocolId = paper-question-picker/v7` 的对象使用本规范；
-- v7 使用新的本地存储 key。正常可读的旧记录可复制到新容器，但不得删除或改写旧 key；若旧值无法解析，必须先将它的完整原始文本写入独立隔离 key，确认写入成功后才可移除那个仍未被其他标签页改变的无法读取值；任一保全或迁移步骤失败时必须停止覆盖；
+- v5 必须继续由冻结的 v5 实现验证，固定每周 3 篇；不能按 v6 的 `courseWeeks` 重新分周；
+- v6 加载 v5 核心作为旧协议实现，并只对 `version = 6`、`protocolId = paper-question-picker/v6` 的对象使用本规范；
+- v6 使用新的本地存储 key。正常可读的旧记录可复制到新容器，但不得删除或改写旧 key；若旧值无法解析，必须先将它的完整原始文本写入独立隔离 key，确认写入成功后才可移除那个仍未被其他标签页改变的无法读取值；任一保全或迁移步骤失败时必须停止覆盖；
 - 私密备份导入后，必须按记录自身的协议版本重算摘要、承诺和计划；
 - 同一逻辑抽签在多个标签页或设备上分叉时，只有在不可变计划相同且每个已揭晓结果都与重放计划一致时，才可合并揭晓进度。
 
-## 17. v7 合成固定向量
+## 17. v6 合成固定向量
 
 以下向量用于跨实现核对。所有文本均已是 NFC，下标从 0 开始：
 
@@ -457,12 +486,12 @@ v7 不声称完整计划在所有满足约束的排程中全局均匀。循环�
 期望结果：
 
 ```text
-inputDigest = 10f1a806165285b92019290da2ad3e8459d567e388fd3d1c4bed90ab933d1d26
-commitment  = acfbe4fba7064be559986725d0bb5acd7783b7b946cff22765ce7efa5f85fcea
-planDigest  = 58abe47843b89986fc79396cf801b94dd77364ce2531ba5ca3b219073abd5e2d
+inputDigest = c165a249c1958ac1c4090ba51ce0450580770043ffc7b244d5b502688298a7f7
+commitment  = 72c68bf7828b87d0c5496f055cb568f20c5ad321d3d957cb33c13f2b5b7aa925
+planDigest  = 3a57d448814144a6e29d005702e0ac40ee66e4f0b415233059c43600d4260eef
 
-questions 流前 4 个 u32  = [2549331025, 3584920455, 3848812323, 2569504242]
-presenters 流前 4 个 u32 = [4141092843, 1114241966, 367047659, 3766117314]
+questions 流前 4 个 u32  = [757285734, 3441923874, 3892782815, 3875097610]
+presenters 流前 4 个 u32 = [2817210796, 3416166768, 264532386, 2533968787]
 ```
 
 这 8 个 `u32` 是刚建对应随机流、尚未调用 `uniform`、`shuffle`或排程函数时，连续读取的值。新实现应同时核对输入摘要、承诺、两条随机流、完整计划及计划摘要；只匹配最终一个摘要不足以定位偏差。
@@ -472,15 +501,15 @@ presenters 流前 4 个 u32 = [4141092843, 1114241966, 367047659, 3766117314]
 发布实现至少应满足：
 
 - 没有 Web Crypto 时新建抽签失败，代码中不存在 `Math.random()` 后备随机源；
-- v7 生产实现与独立参考实现对固定向量逐字符、逐随机字节和逐计划一致；
+- v6 生产实现与独立参考实现对固定向量逐字符、逐随机字节和逐计划一致；
 - 对多种 3/4 周次组合、不同周次顺序和大量固定 seed 交叉重放，所有提问与报告不变量成立；
 - 交换学生、周次、周标题或论文顺序会改变输入摘要；
 - 更改 seed、输入、分周结构、角色下标、协议标识、时间、摘要或计划任一项会导致验证失败；
-- 循环角色排程不搜索、不重试，并对所有通过 `N >= 4K` 校验的输入成功；
+- 报告人匹配使用独立随机流，重试次数不改变提问人计划；
 - 未确认公开承诺时不能揭晓，未完成全部论文时不能导出最终报告；
 - 公开凭证自动检查不含 seed、姓名、周标题、论文标题或计划；
-- 验证器拒绝混用 v4/v5/v6/v7 文件并保留 v4、v5、v6 冻结向量；
+- 验证器拒绝混用 v4/v5/v6 文件并保留 v4、v5 冻结向量；
 - 超大 JSON、坏十六进制、未知字段、越界下标、重复角色、原型键和 HTML 文本都安全失败或安全显示；
-- v1–v6 迁移中断不会覆盖旧数据，重复迁移不会制造重复历史。
+- v1–v5 迁移中断不会覆盖旧数据，重复迁移不会制造重复历史。
 
-一旦发布过 v7 receipt，本文件、实现、域字符串、规范 JSON 键顺序和随机消费顺序都必须冻结。任何影响这些结果的修订都必须发布为新协议版本。
+一旦发布过 v6 receipt，本文件、实现、域字符串、规范 JSON 键顺序和随机消费顺序都必须冻结。任何影响这些结果的修订都必须发布为新协议版本。

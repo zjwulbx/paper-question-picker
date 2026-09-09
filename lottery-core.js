@@ -231,14 +231,36 @@
       presenterIds.length === students.length && new Set(presenterIds).size === students.length;
   }
 
+  function verifyScheduleV7(candidate) {
+    if (!verifyScheduleV6(candidate)) return false;
+    return candidate.weeks.every(function weeklyRolesAreDisjoint(week) {
+      const questioners = new Set(week.assignments.flatMap(function questionerIds(assignment) {
+        return assignment.studentIds;
+      }));
+      const presenters = week.assignments.map(function presenterId(assignment) {
+        return assignment.presenterId;
+      });
+      return new Set(presenters).size === presenters.length &&
+        presenters.every(function notQuestioningThisWeek(studentId) { return !questioners.has(studentId); });
+    });
+  }
+
   function verifySchedule(candidate) {
+    if (candidate && Object.hasOwn(candidate, "audit")) {
+      if (!candidate.audit || typeof candidate.audit !== "object") return false;
+      const protocolId = candidate.audit.protocolId;
+      if (protocolId === "paper-question-picker/v7") return verifyScheduleV7(candidate);
+      if (protocolId === "paper-question-picker/v6") return verifyScheduleV6(candidate);
+      if (protocolId === "paper-question-picker/v5" || protocolId === "paper-question-picker/v4") {
+        return verifyScheduleLegacy(candidate);
+      }
+      return false;
+    }
     const hasV6Shape = Boolean(candidate && Array.isArray(candidate.weeks) && candidate.weeks.length &&
       candidate.weeks.every(function labeledWeek(week) {
         return week && typeof week.label === "string" && week.label.trim();
       }));
-    return (candidate && candidate.audit && candidate.audit.protocolId === "paper-question-picker/v6") || hasV6Shape
-      ? verifyScheduleV6(candidate)
-      : verifyScheduleLegacy(candidate);
+    return hasV6Shape ? verifyScheduleV6(candidate) : verifyScheduleLegacy(candidate);
   }
 
   return {

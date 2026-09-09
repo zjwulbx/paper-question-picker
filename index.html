@@ -15,13 +15,13 @@
     <meta property="og:title" content="论文提问抽签" />
     <meta
       property="og:description"
-      content="每篇一位报告人、三位提问人；每人报告一篇、提问三次，全程可验证。"
+      content="每篇一位报告人、三位提问人；每人报告一篇、提问三次，同周任务不叠加。"
     />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://zjwulbx.github.io/paper-question-picker/og.png" />
     <title>论文提问抽签</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=7" />
   </head>
   <body>
     <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -49,9 +49,9 @@
     <main class="shell">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <div class="eyebrow"><span aria-hidden="true">✦</span> 提问均衡 · 报告一人一篇</div>
+          <div class="eyebrow"><span aria-hidden="true">✦</span> 次数均衡 · 同周任务不叠加</div>
           <h1 id="hero-title">愿每一次讨论，都能带来新的启发与收获</h1>
-          <p>每周可安排 3 或 4 篇论文，每篇随机分配 1 位报告人和 3 位提问人。每人全程恰好报告 1 篇、提问 3 次；同篇论文两种角色不重复，结果可在课后本地复核。</p>
+          <p>每周可安排 3 或 4 篇论文，每篇随机分配 1 位报告人和 3 位提问人。每人全程恰好报告 1 篇、提问 3 次；同一周一人最多承担一个角色，结果可在课后本地复核。</p>
         </div>
         <div class="metrics" aria-label="课程概况">
           <div class="metric">
@@ -169,12 +169,12 @@
                 <ol class="verification-steps">
                   <li><strong>锁定输入</strong><span>规范化学生名单与有效论文的分周结构，生成输入摘要。</span></li>
                   <li><strong>提前承诺</strong><span>用私密随机种子生成全程安排；在种子保密时，公开承诺码在现实中无法用于反推内容。</span></li>
-                  <li><strong>依次揭晓</strong><span>提问人按最低次数优先且同周不重复；报告人全程一人一篇，不与本篇提问人重复。</span></li>
+                  <li><strong>依次揭晓</strong><span>每人全程恰好报告一次、提问三次；同一周的报告人与提问人全部互不重复。</span></li>
                   <li><strong>课后复核</strong><span>全部结束后公开种子，用本地验证器重算并核对承诺与结果。</span></li>
                 </ol>
                 <p class="protocol-link"><a href="algorithm.html">查看完整算法与审计协议</a> · <a href="https://github.com/zjwulbx/paper-question-picker">查看公开源代码</a></p>
                 <p class="commitment-limit"><strong>验证边界：</strong>承诺能证明公开后没有更换输入、种子或安排，但不能单独证明组织者在公开前没有反复生成并挑选结果。建议现场生成后立即把公开凭证发到班级群。</p>
-                <p class="legacy-compat"><strong>角色说明：</strong>报告人可以在其他论文中担任提问人；禁止的是同一篇论文内两种角色重复。<strong>旧记录兼容：</strong>v4 安排仍可验证和继续，但不会事后补造未被原承诺锁定的报告人。</p>
+                <p class="legacy-compat"><strong>角色说明：</strong>报告人可以在其他周担任提问人，但同一周不会同时承担报告和提问任务。<strong>旧记录兼容：</strong>v4–v6 安排仍按各自发布时的规则验证和继续，不会被新规则改写。</p>
               </details>
 
               <section id="audit-panel" class="audit-panel" aria-labelledby="audit-title" hidden>
@@ -210,7 +210,7 @@
               </div>
             </div>
             <div id="archive-list" class="archive-list"></div>
-            <p class="archive-note"><strong>备份提示：</strong>JSON 备份可放入可信的微信文件或私有网盘，换设备后再导入。它始终是私密恢复文件，含验证种子、姓名、课程表和完整预排结果，请勿发群或公开分享；班级核验请使用课程结束后导出的审计报告。<span>v1–v3 旧记录不可重放验证；v4 可验证原提问安排但不含报告人，v5 仍可按固定三篇分周协议验证。</span></p>
+            <p class="archive-note"><strong>备份提示：</strong>JSON 备份可放入可信的微信文件或私有网盘，换设备后再导入。它始终是私密恢复文件，含验证种子、姓名、课程表和完整预排结果，请勿发群或公开分享；班级核验请使用课程结束后导出的审计报告。<span>v1–v3 旧记录不可重放验证；v4–v6 仍按各自发布时的规则验证，不会被新规则改写。</span></p>
             <p class="storage-origin-note"><strong>本机隐私：</strong>未揭晓安排会保存在当前浏览器。请使用受控设备；同一 <code>zjwulbx.github.io</code> 域名下的其他 Pages 项目理论上共享这份浏览器存储，长期使用建议配置本应用独占域名。</p>
           </section>
 
@@ -250,11 +250,12 @@
       </section>
     </main>
 
-    <script src="course-core.js?v=6"></script>
-    <script src="lottery-core.js?v=6"></script>
-    <script src="history-core.js?v=6"></script>
-    <script src="audit-core.js?v=6"></script>
+    <script src="course-core.js?v=7"></script>
+    <script src="lottery-core.js?v=7"></script>
+    <script src="history-core.js?v=7"></script>
+    <script src="audit-core.js?v=7"></script>
     <script src="audit-core-v6.js?v=6"></script>
-    <script src="app.js?v=6"></script>
+    <script src="audit-core-v7.js?v=7"></script>
+    <script src="app.js?v=7"></script>
   </body>
 </html>

@@ -14,7 +14,7 @@
     <meta name="theme-color" content="#173b55" />
     <title>本地验证器｜论文提问抽签</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="verifier.css?v=6" />
+    <link rel="stylesheet" href="verifier.css?v=7" />
   </head>
   <body>
     <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -121,11 +121,11 @@
           <div class="info-icon green" aria-hidden="true">◎</div>
           <h2>公平规则也会重新检查</h2>
           <ol class="rule-list">
-            <li><span>1</span><p>学生数与有效论文数相等，人数不少于 9；分周结构也包含在承诺中。</p></li>
-            <li><span>2</span><p>v6 每周 3 或 4 篇、每篇 3 位提问人，同一周的全部提问人不重复。</p></li>
-            <li><span>3</span><p>优先安排累计提问次数最少的学生，同次数者由验证种子决定顺序。</p></li>
+            <li><span>1</span><p>学生数与有效论文数相等；v7 若每周最多 3 篇需至少 12 人，最多 4 篇需至少 16 人。</p></li>
+            <li><span>2</span><p>每周 3 或 4 篇、每篇 3 位提问人，同一周的全部提问人互不重复。</p></li>
+            <li><span>3</span><p>v7 同一周的报告人与全部提问人也互不重复，每人一周最多承担一个角色。</p></li>
             <li><span>4</span><p>全部课程结束后，每位学生恰好提问 3 次。</p></li>
-            <li><span>5</span><p>v5/v6 每篇恰好 1 位报告人，每人恰好报告 1 篇，且不是本篇提问人。</p></li>
+            <li><span>5</span><p>v5–v7 每篇恰好 1 位报告人、每位学生全程恰好报告 1 篇；v4 旧记录不含报告人。</p></li>
           </ol>
         </article>
 
@@ -145,7 +145,7 @@
           <h2>它不能证明什么？</h2>
           <p>承诺机制可以证明<strong>公开之后没有改动</strong>，但不能证明组织者在公开之前没有反复生成多个候选结果并挑选其中一个。班级群消息的时间记录，是判断承诺是否确实提前公开的重要依据。</p>
           <p>验证器也无法独立确认文件由谁发送，参与者仍需把公开凭证与原始群消息中的文件或承诺码进行核对。</p>
-          <p>v4/v5 旧协议的两份文件仍按原规则验证；v4 只锁定提问人安排，不会事后补造报告人。</p>
+          <p>v4/v5/v6 旧协议的两份文件仍按发布时的原规则验证；v4 只锁定提问人安排，v5/v6 不会被事后套用 v7 的同周角色规则。</p>
         </article>
       </section>
 
@@ -155,9 +155,10 @@
       </footer>
     </main>
 
-    <script src="lottery-core.js?v=6"></script>
-    <script src="audit-core.js?v=6"></script>
+    <script src="lottery-core.js?v=7"></script>
+    <script src="audit-core.js?v=7"></script>
     <script src="audit-core-v6.js?v=6"></script>
-    <script src="verify.js?v=6"></script>
+    <script src="audit-core-v7.js?v=7"></script>
+    <script src="verify.js?v=7"></script>
   </body>
 </html>

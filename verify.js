@@ -274,8 +274,10 @@
     if (!students || !papers || !planWeeks) return [];
 
     const receipt = ownValue(report, "receipt") || {};
-    const isV6 = ownValue(report, "version") === 6;
-    const expectedWeekSizes = isV6 && Array.isArray(receipt.weekPaperCounts)
+    const version = ownValue(report, "version");
+    const isV7 = version === 7;
+    const isVariableWeek = version === 6 || isV7;
+    const expectedWeekSizes = isVariableWeek && Array.isArray(receipt.weekPaperCounts)
       ? receipt.weekPaperCounts.slice()
       : new Array(planWeeks.length).fill(3);
     const totals = new Array(students.length).fill(0);
@@ -284,6 +286,7 @@
     let paperCursor = 0;
     let weeklyShape = true;
     let presenterShape = true;
+    let weeklyRoleSeparation = true;
     let presenterMode = null;
 
     planWeeks.forEach(function inspectWeek(week, weekIndex) {
@@ -294,6 +297,7 @@
         return;
       }
       const weeklyIndexes = [];
+      const weeklyPresenters = [];
       week.assignments.forEach(function inspectAssignment(assignment, paperOffset) {
         paperSlots += 1;
         if (!assignment || assignment.paperIndex !== paperCursor + paperOffset ||
@@ -315,21 +319,30 @@
             presenterShape = false;
           } else {
             presentationTotals[assignment.presenterIndex] += 1;
+            weeklyPresenters.push(assignment.presenterIndex);
           }
         }
       });
       if (weeklyIndexes.length !== weekSize * 3 || new Set(weeklyIndexes).size !== weekSize * 3) weeklyShape = false;
+      if (isV7 && (weeklyPresenters.length !== weekSize || new Set(weeklyPresenters).size !== weekSize ||
+          weeklyPresenters.some(function overlap(index) { return weeklyIndexes.includes(index); }))) {
+        weeklyRoleSeparation = false;
+      }
       paperCursor += weekSize;
     });
 
-    const countShape = students.length === papers.length && students.length >= 9 &&
+    const countShape = students.length === papers.length && students.length >= (isV7 ? 12 : 9) &&
       expectedWeekSizes.length === planWeeks.length && paperSlots === papers.length &&
       expectedWeekSizes.reduce(function sum(total, size) { return total + size; }, 0) === papers.length &&
-      (!isV6 ? students.length % 3 === 0 : Math.max.apply(null, expectedWeekSizes) * 3 <= students.length);
+      (isV7
+        ? Math.max.apply(null, expectedWeekSizes) * 4 <= students.length
+        : version === 6
+          ? Math.max.apply(null, expectedWeekSizes) * 3 <= students.length
+          : students.length % 3 === 0);
 
     const checks = [
       normalizedCheck("学生数与论文数相等，且人数符合规则", countShape),
-      normalizedCheck(isV6
+      normalizedCheck(isVariableWeek
         ? "每周 3 或 4 篇、每篇 3 位提问人、同周提问人不重复"
         : "每周 3 篇、每篇 3 位提问人、同周 9 位提问人不重复", weeklyShape),
       normalizedCheck("每位学生在完整安排中恰好提问 3 次",
@@ -341,6 +354,9 @@
         normalizedCheck("每位学生在完整安排中恰好报告 1 篇",
           presenterShape && presentationTotals.every(function one(count) { return count === 1; })),
       );
+      if (isV7) {
+        checks.push(normalizedCheck("同一周内，报告人与全部提问人互不重复", weeklyRoleSeparation));
+      }
     }
     return checks;
   }

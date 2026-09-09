@@ -9,11 +9,13 @@ const vm = require("node:vm");
 const root = path.resolve(__dirname, "..");
 const Audit = require(path.join(root, "audit-core.js"));
 const AuditV6 = require(path.join(root, "audit-core-v6.js"));
+const AuditV7 = require(path.join(root, "audit-core-v7.js"));
 const Lottery = require(path.join(root, "lottery-core.js"));
 const History = require(path.join(root, "history-core.js"));
 const Course = require(path.join(root, "course-core.js"));
 const Reference = require(path.join(__dirname, "reference-v5.cjs"));
 const ReferenceV6 = require(path.join(__dirname, "reference-v6.cjs"));
+const ReferenceV7 = require(path.join(__dirname, "reference-v7.cjs"));
 
 let checks = 0;
 
@@ -37,6 +39,10 @@ function seedFor(index) {
 
 function seedForV6(index) {
   return crypto.createHash("sha256").update("paper-picker-v6-property-" + index).digest("hex");
+}
+
+function seedForV7(index) {
+  return crypto.createHash("sha256").update("paper-picker-v7-property-" + index).digest("hex");
 }
 
 const SYNTHETIC_V6_WEEK_SIZES = [4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3];
@@ -125,6 +131,46 @@ function assertV6PlanRules(plan, weekSizes) {
     "v6 not every student questions exactly three times");
   check(presentations.every(function exactlyOnce(value) { return value === 1; }),
     "v6 not every student presents exactly once");
+}
+
+function assertV7PlanRules(plan, weekSizes) {
+  const count = weekSizes.reduce(function total(sum, size) { return sum + size; }, 0);
+  const questions = new Array(count).fill(0);
+  const presentations = new Array(count).fill(0);
+  let paperCursor = 0;
+  equal(plan.weeks.length, weekSizes.length, "v7 wrong week count");
+  plan.weeks.forEach(function inspectWeek(week, weekIndex) {
+    const weekSize = weekSizes[weekIndex];
+    equal(week.weekIndex, weekIndex, "v7 wrong week index");
+    equal(week.assignments.length, weekSize, "v7 wrong assignments per week");
+    const weeklyQuestioners = [];
+    const weeklyPresenters = [];
+    week.assignments.forEach(function inspectAssignment(assignment, offset) {
+      equal(assignment.paperIndex, paperCursor + offset, "v7 wrong paper index");
+      equal(assignment.studentIndexes.length, 3, "v7 wrong questioner count");
+      equal(new Set(assignment.studentIndexes).size, 3, "v7 repeated same-paper questioner");
+      assignment.studentIndexes.forEach(function addQuestion(index) {
+        check(Number.isInteger(index) && index >= 0 && index < count, "v7 questioner index out of range");
+        questions[index] += 1;
+        weeklyQuestioners.push(index);
+      });
+      check(Number.isInteger(assignment.presenterIndex) && assignment.presenterIndex >= 0 &&
+        assignment.presenterIndex < count, "v7 presenter index out of range");
+      presentations[assignment.presenterIndex] += 1;
+      weeklyPresenters.push(assignment.presenterIndex);
+    });
+    equal(new Set(weeklyQuestioners).size, weekSize * 3, "v7 weekly questioners are not unique");
+    equal(new Set(weeklyPresenters).size, weekSize, "v7 weekly presenters are not unique");
+    const questionerSet = new Set(weeklyQuestioners);
+    check(weeklyPresenters.every(function noWeeklyOverlap(index) { return !questionerSet.has(index); }),
+      "v7 presenter also questions in the same week");
+    paperCursor += weekSize;
+  });
+  equal(paperCursor, count, "v7 papers are not covered exactly once");
+  check(questions.every(function exactlyThree(value) { return value === 3; }),
+    "v7 not every student questions exactly three times");
+  check(presentations.every(function exactlyOnce(value) { return value === 1; }),
+    "v7 not every student presents exactly once");
 }
 
 function scheduleToPlan(schedule) {
@@ -736,6 +782,521 @@ function v6PropertyAndReferenceChecks() {
   return { maximumPresenterAttempts: maximumPresenterAttempts, retryingCases: retryingCases };
 }
 
+function fixedV7Vector() {
+  const fixture = v6Fixture(SYNTHETIC_V6_WEEK_SIZES);
+  const seed = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+  const issuedAt = "2026-09-09T00:00:00.000Z";
+  const expectedInputDigest = "10f1a806165285b92019290da2ad3e8459d567e388fd3d1c4bed90ab933d1d26";
+  const expectedCommitment = "acfbe4fba7064be559986725d0bb5acd7783b7b946cff22765ce7efa5f85fcea";
+  const expectedPlanDigest = "58abe47843b89986fc79396cf801b94dd77364ce2531ba5ca3b219073abd5e2d";
+
+  equal(AuditV7.inputDigest(fixture.students, fixture.courseWeeks), expectedInputDigest,
+    "v7 fixed input digest changed");
+  equal(AuditV7.computeCommitment(fixture.students, fixture.courseWeeks, seed, issuedAt), expectedCommitment,
+    "v7 fixed commitment changed");
+  equal(ReferenceV7.inputDigest(fixture.students, fixture.courseWeeks), expectedInputDigest,
+    "reference v7 fixed input digest differs");
+  equal(ReferenceV7.commitment(fixture.students, fixture.courseWeeks, seed, issuedAt), expectedCommitment,
+    "reference v7 fixed commitment differs");
+
+  const questionPrng = AuditV7.createPrng(seed, expectedInputDigest, "questions");
+  const presenterPrng = AuditV7.createPrng(seed, expectedInputDigest, "presenters");
+  equal(Array.from({ length: 4 }, function next() { return questionPrng.nextUint32(); }),
+    [2549331025, 3584920455, 3848812323, 2569504242], "v7 question stream changed");
+  equal(Array.from({ length: 4 }, function next() { return presenterPrng.nextUint32(); }),
+    [4141092843, 1114241966, 367047659, 3766117314], "v7 presenter stream changed");
+  const referenceQuestionPrng = ReferenceV7.createPrng(seed, expectedInputDigest, "questions");
+  const referencePresenterPrng = ReferenceV7.createPrng(seed, expectedInputDigest, "presenters");
+  equal(Array.from({ length: 4 }, function next() { return referenceQuestionPrng.nextUint32(); }),
+    [2549331025, 3584920455, 3848812323, 2569504242], "reference v7 question stream differs");
+  equal(Array.from({ length: 4 }, function next() { return referencePresenterPrng.nextUint32(); }),
+    [4141092843, 1114241966, 367047659, 3766117314], "reference v7 presenter stream differs");
+
+  const schedule = AuditV7.createAuditedSchedule(fixture.students, fixture.courseWeeks, {
+    seedHex: seed,
+    createdAt: issuedAt,
+  });
+  const plan = scheduleToV6Plan(schedule);
+  const referencePlan = ReferenceV7.makePlan(fixture.students, fixture.courseWeeks, seed);
+  equal(plan, referencePlan, "v7 fixed production/reference plan mismatch");
+  equal(AuditV7.planDigest(plan, fixture.courseWeeks, fixture.students.length), expectedPlanDigest,
+    "v7 fixed plan digest changed");
+  equal(ReferenceV7.planDigest(referencePlan), expectedPlanDigest,
+    "reference v7 fixed plan digest differs");
+  equal(plan.weeks[0], {
+    weekIndex: 0,
+    assignments: [
+      { paperIndex: 0, studentIndexes: [3, 26, 0], presenterIndex: 46 },
+      { paperIndex: 1, studentIndexes: [24, 37, 2], presenterIndex: 36 },
+      { paperIndex: 2, studentIndexes: [42, 18, 10], presenterIndex: 23 },
+      { paperIndex: 3, studentIndexes: [9, 11, 19], presenterIndex: 45 },
+    ],
+  }, "v7 fixed first week changed");
+  equal(plan.weeks[12], {
+    weekIndex: 12,
+    assignments: [
+      { paperIndex: 45, studentIndexes: [36, 2, 24], presenterIndex: 43 },
+      { paperIndex: 46, studentIndexes: [23, 10, 42], presenterIndex: 41 },
+      { paperIndex: 47, studentIndexes: [45, 19, 9], presenterIndex: 27 },
+    ],
+  }, "v7 fixed last week changed");
+  equal(schedule.audit.protocolId, "paper-question-picker/v7", "v7 fixed schedule has wrong protocol id");
+  equal(schedule.audit.scheduleId, "variable-week-cyclic-weekly-disjoint-roles/v1",
+    "v7 fixed schedule has wrong schedule id");
+  assertV7PlanRules(plan, fixture.weekSizes);
+}
+
+function v7InputAndBoundaryChecks() {
+  const acceptedTwelve = v6Fixture([3, 3, 3, 3]);
+  const acceptedSixteen = v6Fixture([4, 4, 4, 4]);
+  const acceptedVariable = v6Fixture([4, 3, 3, 3, 3]);
+  [acceptedTwelve, acceptedSixteen, acceptedVariable].forEach(function accepted(fixture) {
+    const canonical = AuditV7.canonicalizeInput(fixture.students, fixture.courseWeeks);
+    equal(canonical, ReferenceV7.canonicalizeInput(fixture.students, fixture.courseWeeks),
+      "v7 production/reference boundary normalization differs");
+    assertV7PlanRules(
+      scheduleToV6Plan(AuditV7.createDeterministicSchedule(fixture.students, fixture.courseWeeks, seedForV7(fixture.students.length))),
+      fixture.weekSizes,
+    );
+  });
+
+  const nineForThree = v6Fixture([3, 3, 3]);
+  assert.throws(function rejectNineForThree() {
+    AuditV7.canonicalizeInput(nineForThree.students, nineForThree.courseWeeks);
+  }, /12|不足|互不重复/, "v7 accepted 9 students for a three-paper week");
+  const twelveForFour = v6Fixture([4, 4, 4]);
+  assert.throws(function rejectTwelveForFour() {
+    AuditV7.canonicalizeInput(twelveForFour.students, twelveForFour.courseWeeks);
+  }, /不足|互不重复/, "v7 accepted 12 students for a four-paper week");
+  assert.throws(function referenceRejectsNineForThree() {
+    ReferenceV7.canonicalizeInput(nineForThree.students, nineForThree.courseWeeks);
+  }, /input size|not enough/, "reference v7 accepted 9 students for a three-paper week");
+  assert.throws(function referenceRejectsTwelveForFour() {
+    ReferenceV7.canonicalizeInput(twelveForFour.students, twelveForFour.courseWeeks);
+  }, /not enough/, "reference v7 accepted 12 students for a four-paper week");
+  assert.throws(function referenceRejectsBadSeed() {
+    ReferenceV7.commitment(acceptedTwelve.students, acceptedTwelve.courseWeeks, "0".repeat(63),
+      "2026-09-09T00:00:00.000Z");
+  }, /seed/, "reference v7 accepted a malformed seed");
+  assert.throws(function referenceRejectsBadTime() {
+    ReferenceV7.commitment(acceptedTwelve.students, acceptedTwelve.courseWeeks, "0".repeat(64),
+      "2026-09-09 00:00:00Z");
+  }, /time/, "reference v7 accepted a non-canonical issued time");
+  checks += 6;
+}
+
+function findWeeklyOverlapPresenterSwap(plan) {
+  const allAssignments = plan.weeks.flatMap(function flatten(week) { return week.assignments; });
+  for (const week of plan.weeks) {
+    for (const target of week.assignments) {
+      for (const other of week.assignments) {
+        if (other === target) continue;
+        for (const weeklyQuestioner of other.studentIndexes) {
+          const source = allAssignments.find(function currentPresenter(assignment) {
+            return assignment.presenterIndex === weeklyQuestioner;
+          });
+          if (source && source !== target && !source.studentIndexes.includes(target.presenterIndex)) {
+            const savedPresenter = target.presenterIndex;
+            target.presenterIndex = source.presenterIndex;
+            source.presenterIndex = savedPresenter;
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function findWeeklyOverlapPresenterIdSwap(schedule) {
+  const allAssignments = schedule.weeks.flatMap(function flatten(week) { return week.assignments; });
+  for (const week of schedule.weeks) {
+    for (const target of week.assignments) {
+      for (const other of week.assignments) {
+        if (other === target) continue;
+        for (const weeklyQuestioner of other.studentIds) {
+          const source = allAssignments.find(function currentPresenter(assignment) {
+            return assignment.presenterId === weeklyQuestioner;
+          });
+          if (source && source !== target && !source.studentIds.includes(target.presenterId)) {
+            const savedPresenter = target.presenterId;
+            target.presenterId = source.presenterId;
+            source.presenterId = savedPresenter;
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function v7EndToEndTamperingAndLegacyCompatibility() {
+  const fixture = v6Fixture(SYNTHETIC_V6_WEEK_SIZES);
+  const seed = seedForV7(70001);
+  const issuedAt = "2026-09-09T07:00:00.000Z";
+  const schedule = AuditV7.createAuditedSchedule(fixture.students, fixture.courseWeeks, {
+    seedHex: seed,
+    createdAt: issuedAt,
+  });
+  check(Lottery.verifySchedule(schedule), "LotteryCore rejects a valid v7 schedule");
+  assertV7PlanRules(scheduleToV6Plan(schedule), fixture.weekSizes);
+
+  const receipt = AuditV7.createPublicReceipt(schedule);
+  equal(receipt.version, 7, "new v7 receipt has the wrong version");
+  equal(receipt.weekPaperCounts, SYNTHETIC_V6_WEEK_SIZES, "v7 receipt lost the week structure");
+  check(!Object.hasOwn(receipt, "seed") && !Object.hasOwn(receipt, "plan") &&
+    !Object.hasOwn(receipt, "students") && !Object.hasOwn(receipt, "courseWeeks"),
+  "v7 public receipt leaks private fields");
+
+  const replayAtAnotherTime = AuditV7.createAuditedSchedule(fixture.students, fixture.courseWeeks, {
+    seedHex: seed,
+    createdAt: "2026-09-09T07:30:00.000Z",
+  });
+  equal(scheduleToV6Plan(replayAtAnotherTime), scheduleToV6Plan(schedule),
+    "v7 seed/input replay depends on creation time");
+  equal(replayAtAnotherTime.audit.planDigest, schedule.audit.planDigest,
+    "v7 plan digest depends on creation time");
+  check(replayAtAnotherTime.audit.commitment !== schedule.audit.commitment,
+    "v7 commitment does not bind its issuance time");
+  assert.throws(function incompleteReportIsRejected() {
+    AuditV7.createFinalReport(schedule, { completedAt: "2026-09-09T08:00:00.000Z" });
+  }, /全部论文|结束/, "v7 exported a final report before all papers were revealed");
+  checks += 1;
+
+  AuditV7.confirmCommitment(schedule, "2026-09-09T07:01:00.000Z");
+  schedule.weeks.forEach(function reveal(week) { week.revealed.fill(true); });
+  const report = AuditV7.createFinalReport(schedule, { completedAt: "2026-09-09T08:00:00.000Z" });
+  const verified = AuditV7.verifyReceiptAndReport(receipt, report);
+  check(verified.ok, "valid v7 audit does not verify");
+  equal(verified.replayedPlan, report.plan, "verified v7 replay differs from report");
+  check(AuditV7.verifyReceiptAndReport(reverseObjectKeys(receipt), reverseObjectKeys(report)).ok,
+    "v7 verification depends on JSON object key order");
+
+  const weeklyOverlap = structuredClone(report);
+  check(findWeeklyOverlapPresenterSwap(weeklyOverlap.plan), "v7 test could not create a weekly-only role overlap");
+  check(typeof AuditV6.planDigest(weeklyOverlap.plan, fixture.courseWeeks, fixture.students.length) === "string",
+    "weekly-only overlap unexpectedly violates the frozen v6 structural rules");
+  equal(AuditV7.verifyReceiptAndReport(receipt, weeklyOverlap).code, "INVALID_PLAN",
+    "v7 accepted a presenter who questions another paper in the same week");
+
+  const weeklyOverlapSchedule = structuredClone(schedule);
+  check(findWeeklyOverlapPresenterIdSwap(weeklyOverlapSchedule),
+    "v7 test could not create a weekly-only schedule overlap");
+  check(!Lottery.verifySchedule(weeklyOverlapSchedule),
+    "LotteryCore accepted a presenter who questions another paper in the same week");
+  assert.throws(function rejectOverlappingBackup() {
+    History.createBackup({
+      studentText: fixture.students.join("\n"),
+      paperText: Course.formatCourseTable(fixture.courseWeeks),
+      schedule: weeklyOverlapSchedule,
+      activeWeek: 0,
+    }, [], Lottery.verifySchedule, "2026-09-09T08:30:00.000Z");
+  }, /安排|进度|无效|invalid/i, "private backup accepted a v7 schedule with weekly role overlap");
+  checks += 1;
+
+  const unknownProtocol = structuredClone(schedule);
+  unknownProtocol.audit.protocolId = "paper-question-picker/unknown";
+  check(!Lottery.verifySchedule(unknownProtocol), "LotteryCore accepted an unknown audited protocol");
+
+  const alteredDigest = structuredClone(report);
+  alteredDigest.planDigest = (alteredDigest.planDigest[0] === "0" ? "1" : "0") + alteredDigest.planDigest.slice(1);
+  equal(AuditV7.verifyReceiptAndReport(receipt, alteredDigest).code, "PLAN_DIGEST_MISMATCH",
+    "v7 did not identify a tampered plan digest");
+
+  const alteredSeed = structuredClone(report);
+  alteredSeed.seed = (alteredSeed.seed[0] === "0" ? "1" : "0") + alteredSeed.seed.slice(1);
+  equal(AuditV7.verifyReceiptAndReport(receipt, alteredSeed).code, "COMMITMENT_MISMATCH",
+    "v7 did not identify a tampered seed");
+
+  const alteredCourse = structuredClone(report);
+  alteredCourse.courseWeeks[0].label += "（改）";
+  equal(AuditV7.verifyReceiptAndReport(receipt, alteredCourse).code, "INPUT_DIGEST_MISMATCH",
+    "v7 did not identify a tampered course table");
+
+  const wrongVersion = structuredClone(report);
+  wrongVersion.version = 6;
+  equal(AuditV7.verifyReceiptAndReport(receipt, wrongVersion).code, "VERSION_MISMATCH",
+    "v7 accepted mixed v6/v7 evidence");
+
+  const legacyV6Fixture = v6Fixture(SYNTHETIC_V6_WEEK_SIZES);
+  const legacyV6Schedule = AuditV6.createAuditedSchedule(legacyV6Fixture.students, legacyV6Fixture.courseWeeks, {
+    seedHex: seedForV6(77001),
+    createdAt: "2026-09-09T09:00:00.000Z",
+  });
+  const legacyV6Receipt = AuditV6.createPublicReceipt(legacyV6Schedule);
+  AuditV6.confirmCommitment(legacyV6Schedule, "2026-09-09T09:01:00.000Z");
+  legacyV6Schedule.weeks.forEach(function reveal(week) { week.revealed.fill(true); });
+  const legacyV6Report = AuditV6.createFinalReport(legacyV6Schedule, {
+    completedAt: "2026-09-09T10:00:00.000Z",
+  });
+  check(AuditV7.verifyReceiptAndReport(legacyV6Receipt, legacyV6Report).ok,
+    "v7 dispatcher cannot verify a frozen v6 audit");
+
+  const historySchedule = AuditV7.createAuditedSchedule(fixture.students, fixture.courseWeeks, {
+    seedHex: seedForV7(77500),
+    createdAt: "2026-09-09T10:30:00.000Z",
+  });
+  AuditV7.confirmCommitment(historySchedule, "2026-09-09T10:31:00.000Z");
+  historySchedule.weeks[0].revealed[0] = true;
+  const historySnapshot = {
+    studentText: fixture.students.join("\n"),
+    paperText: Course.formatCourseTable(fixture.courseWeeks),
+    schedule: historySchedule,
+    activeWeek: 0,
+  };
+  const historyResult = History.upsertSession([], historySnapshot, {
+    type: "reveal",
+    description: "v7 历史往返测试",
+    at: "2026-09-09T10:32:00.000Z",
+  }, Lottery.verifySchedule, {
+    now: "2026-09-09T10:32:00.000Z",
+    random: function deterministicSessionId() { return 0.75; },
+  });
+  const historyCurrent = Object.assign({}, historySnapshot, { sessionId: historyResult.sessionId });
+  const historyBackup = History.createBackup(historyCurrent, historyResult.sessions, Lottery.verifySchedule,
+    "2026-09-09T10:33:00.000Z");
+  const restoredHistory = History.parseBackup(structuredClone(historyBackup), Lottery.verifySchedule,
+    "2026-09-09T10:34:00.000Z");
+  equal(restoredHistory.current.schedule, historySchedule, "v7 private backup changed the current schedule");
+  equal(restoredHistory.sessions.length, 1, "v7 private backup lost its history session");
+
+  [
+    { api: Audit, students: names("匿名V5兼容-", 12), papers: names("旧论文V5兼容-", 12), version: 5 },
+    { api: Audit.legacyV4, students: names("匿名V4兼容-", 12), papers: names("旧论文V4兼容-", 12), version: 4 },
+  ].forEach(function legacyRoundTrip(item) {
+    const legacySchedule = item.api.createAuditedSchedule(item.students, item.papers, {
+      seedHex: seedForV7(78000 + item.version),
+      createdAt: "2026-09-09T11:00:00.000Z",
+    });
+    const legacyReceipt = item.api.createPublicReceipt(legacySchedule);
+    item.api.confirmCommitment(legacySchedule, "2026-09-09T11:01:00.000Z");
+    legacySchedule.weeks.forEach(function reveal(week) { week.revealed.fill(true); });
+    const legacyReport = item.api.createFinalReport(legacySchedule, {
+      completedAt: "2026-09-09T12:00:00.000Z",
+    });
+    equal(AuditV7.parsePublicReceipt(legacyReceipt).version, item.version,
+      "v7 dispatcher changed a legacy receipt version");
+    check(AuditV7.verifyReceiptAndReport(legacyReceipt, legacyReport).ok,
+      "v7 dispatcher cannot verify a frozen v" + item.version + " audit");
+  });
+}
+
+function v7PropertyAndReferenceChecks() {
+  const configurations = [
+    [3, 3, 3, 3],
+    [4, 4, 4, 4],
+    [4, 3, 3, 3, 3],
+    [4, 4, 3, 3, 3],
+    [4, 4, 4, 3, 3, 3],
+    [4, 4, 4, 4, 3, 3, 3, 3],
+    SYNTHETIC_V6_WEEK_SIZES,
+    new Array(75).fill(4),
+  ];
+  const fixtures = configurations.map(v6Fixture);
+  const total = 1024;
+  for (let index = 0; index < total; index += 1) {
+    const fixture = fixtures[index % fixtures.length];
+    const seed = seedForV7(index);
+    const productionSchedule = AuditV7.createDeterministicSchedule(fixture.students, fixture.courseWeeks, seed);
+    const productionPlan = scheduleToV6Plan(productionSchedule);
+    const referencePlan = ReferenceV7.makePlan(fixture.students, fixture.courseWeeks, seed);
+    assertV7PlanRules(productionPlan, fixture.weekSizes);
+    equal(productionPlan, referencePlan, "v7 production/reference plan mismatch at property seed " + index);
+    equal(AuditV7.planDigest(productionPlan, fixture.courseWeeks, fixture.students.length),
+      ReferenceV7.planDigest(referencePlan), "v7 production/reference plan digest mismatch at property seed " + index);
+    equal(AuditV7.inputDigest(fixture.students, fixture.courseWeeks),
+      ReferenceV7.inputDigest(fixture.students, fixture.courseWeeks),
+      "v7 production/reference input digest mismatch at property seed " + index);
+    if (index < 64) {
+      equal(scheduleToV6Plan(AuditV7.createDeterministicSchedule(fixture.students, fixture.courseWeeks, seed)),
+        productionPlan, "v7 same seed/input did not replay at property seed " + index);
+      equal(AuditV7.computeCommitment(fixture.students, fixture.courseWeeks, seed, "2026-09-09T13:00:00.000Z"),
+        ReferenceV7.commitment(fixture.students, fixture.courseWeeks, seed, "2026-09-09T13:00:00.000Z"),
+        "v7 production/reference commitment mismatch at property seed " + index);
+    }
+  }
+  const source = fs.readFileSync(path.join(root, "audit-core-v7.js"), "utf8");
+  check(!/MAX_PRESENTER_ATTEMPTS/.test(source), "v7 unexpectedly contains presenter retry logic");
+  check(/roleOrder\s*=\s*presenterRandom\.shuffle/.test(source) && /questionOffsets\s*=/.test(source),
+    "v7 cyclic role construction is missing");
+  return total;
+}
+
+function createAppBrowserVm(options) {
+  const stored = new Map(Object.entries((options && options.storage) || {}));
+  const timers = [];
+  const elements = new Map();
+
+  function fakeElement() {
+    const listeners = new Map();
+    return {
+      value: "",
+      textContent: "",
+      innerHTML: "",
+      hidden: false,
+      disabled: false,
+      className: "",
+      dataset: {},
+      style: {},
+      files: [],
+      addEventListener: function addEventListener(type, listener) {
+        const current = listeners.get(type) || [];
+        current.push(listener);
+        listeners.set(type, current);
+      },
+      dispatch: function dispatch(type, event) {
+        (listeners.get(type) || []).forEach(function invoke(listener) {
+          listener(event || { target: this });
+        }, this);
+      },
+      replaceChildren: function replaceChildren() {},
+      scrollIntoView: function scrollIntoView() {},
+      click: function click() {},
+      closest: function closest() { return null; },
+    };
+  }
+
+  const document = {
+    querySelector: function querySelector(selector) {
+      if (!elements.has(selector)) elements.set(selector, fakeElement());
+      return elements.get(selector);
+    },
+    getElementById: function getElementById(id) {
+      return this.querySelector("#" + id);
+    },
+    createElement: fakeElement,
+  };
+
+  const localStorage = {
+    getItem: function getItem(key) {
+      return stored.has(key) ? stored.get(key) : null;
+    },
+    setItem: function setItem(key, value) {
+      stored.set(key, String(value));
+    },
+    removeItem: function removeItem(key) {
+      stored.delete(key);
+    },
+  };
+
+  const context = {
+    console: console,
+    document: document,
+    localStorage: localStorage,
+    navigator: {},
+    TextEncoder: TextEncoder,
+    TextDecoder: TextDecoder,
+    Uint8Array: Uint8Array,
+    DataView: DataView,
+    Blob: Blob,
+    structuredClone: structuredClone,
+    URL: {
+      createObjectURL: function createObjectURL() { return "blob:test"; },
+      revokeObjectURL: function revokeObjectURL() {},
+    },
+    crypto: {
+      getRandomValues: function getRandomValues(array) {
+        array.fill(7);
+        return array;
+      },
+    },
+  };
+
+  context.window = context;
+  context.globalThis = context;
+  context.confirm = function confirm() { return true; };
+  context.addEventListener = function addEventListener() {};
+  context.setTimeout = function setTimeout(callback) {
+    timers.push(callback);
+    return timers.length;
+  };
+  context.clearTimeout = function clearTimeout() {};
+
+  vm.createContext(context);
+  function load(file) {
+    vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
+  }
+  ["course-core.js", "lottery-core.js", "history-core.js", "audit-core.js", "audit-core-v6.js"].forEach(load);
+  if (!options || options.includeV7 !== false) load("audit-core-v7.js");
+  load("app.js");
+
+  return {
+    context: context,
+    elements: elements,
+    storage: stored,
+    flushTimers: function flushTimers() {
+      let count = 0;
+      while (timers.length) {
+        timers.shift()();
+        count += 1;
+        if (count > 1000) throw new Error("browser VM timer loop did not settle");
+      }
+    },
+  };
+}
+
+function browserWiringAndMigrationChecks() {
+  const smallFixture = v6Fixture([3, 3, 3, 3]);
+  const missingCoreBrowser = createAppBrowserVm({ includeV7: false });
+  const missingStudents = missingCoreBrowser.elements.get("#students-input");
+  const missingPapers = missingCoreBrowser.elements.get("#papers-input");
+  const missingGenerate = missingCoreBrowser.elements.get("#generate-button");
+  equal(missingCoreBrowser.context.AuditCore.PROTOCOL_ID, "paper-question-picker/v6",
+    "missing-v7 browser fixture unexpectedly loaded v7");
+  missingStudents.value = smallFixture.students.join("\n");
+  missingPapers.value = Course.formatCourseTable(smallFixture.courseWeeks);
+  missingStudents.dispatch("input");
+  missingPapers.dispatch("input");
+  missingCoreBrowser.flushTimers();
+  if (!missingGenerate.disabled) missingGenerate.dispatch("click");
+  missingCoreBrowser.flushTimers();
+  const missingRaw = missingCoreBrowser.storage.get("paper-question-picker-web-v7");
+  const missingSaved = missingRaw ? JSON.parse(missingRaw) : null;
+  check(!missingSaved || missingSaved.schedule === null,
+    "app generated an older-protocol schedule when the v7 core was unavailable");
+  check(missingGenerate.disabled, "generate button stayed enabled without the v7 core");
+  check(/v7|核心.*载入|刷新/.test(missingCoreBrowser.elements.get("#visible-status-text").textContent),
+    "missing v7 core was not explained to the user");
+
+  const fixture = v6Fixture(SYNTHETIC_V6_WEEK_SIZES);
+  const oldSchedule = AuditV6.createAuditedSchedule(fixture.students, fixture.courseWeeks, {
+    seedHex: seedForV6(88001),
+    createdAt: "2026-09-09T00:00:00.000Z",
+  });
+  AuditV6.confirmCommitment(oldSchedule, "2026-09-09T00:01:00.000Z");
+  oldSchedule.weeks[0].revealed[0] = true;
+  const oldRaw = JSON.stringify({
+    appVersion: 6,
+    scheduleKind: "audited-v6",
+    studentText: fixture.students.join("\n"),
+    paperText: Course.formatCourseTable(fixture.courseWeeks),
+    schedule: oldSchedule,
+    activeWeek: 7,
+    sessionId: null,
+  });
+  const migrationBrowser = createAppBrowserVm({
+    includeV7: true,
+    storage: { "paper-question-picker-web-v6": oldRaw },
+  });
+  migrationBrowser.flushTimers();
+  const migrated = JSON.parse(migrationBrowser.storage.get("paper-question-picker-web-v7"));
+  equal(migrated.appVersion, 7, "migration did not write a v7 envelope");
+  equal(migrated.scheduleKind, "audited-v6", "migration relabeled a frozen v6 draw");
+  equal(migrated.schedule.audit.protocolId, "paper-question-picker/v6", "migration rewrote the frozen protocol");
+  equal(migrated.schedule, oldSchedule, "migration changed a frozen v6 schedule or its reveal state");
+  equal(migrated.activeWeek, 7, "migration lost active-week progress");
+  equal(migrationBrowser.storage.get("paper-question-picker-web-v6"), oldRaw,
+    "migration destructively changed the old source value");
+  const migratedHistory = JSON.parse(migrationBrowser.storage.get("paper-question-picker-history-v7"));
+  check(migratedHistory.sessions.some(function containsV6(session) {
+    return session.schedule.audit.protocolId === "paper-question-picker/v6";
+  }), "migration did not preserve v6 progress in v7 history");
+  check(/旧版安排|原有抽签|不会被新规则改写/.test(
+    migrationBrowser.elements.get("#visible-status-text").textContent,
+  ), "migration did not disclose that the restored draw still uses v6 rules");
+}
+
 function privateInputDefaultsChecks() {
   check(!fs.existsSync(path.join(root, "course-preset.js")),
     "public source still ships a real course preset");
@@ -753,7 +1314,7 @@ function privateInputDefaultsChecks() {
   check(/function loadState\(\)[\s\S]*?elements\.studentsInput\.value = "";\s*elements\.papersInput\.value = "";/.test(appSource),
     "fresh load does not explicitly blank both private inputs");
   check(/const paperText = typeof saved\.paperText === "string" \? saved\.paperText : "";/.test(appSource),
-    "missing v6 paperText can fall back to bundled course data");
+    "missing structured paperText can fall back to bundled course data");
 }
 
 function syntheticCourseTableChecks() {
@@ -829,8 +1390,15 @@ function staticSiteChecks() {
     .map(function read(file) { return fs.readFileSync(path.join(root, file), "utf8"); }).join("\n");
   check(!/Math\.random\s*\(/.test(allJavaScript), "site contains Math.random fallback");
   check(fs.existsSync(path.join(root, "ALGORITHM-v4.md")), "frozen v4 specification is missing");
-  check(indexHtml.includes("同篇论文两种角色不重复"), "homepage role rule is missing");
-  check(indexHtml.includes("报告人可以在其他论文中担任提问人"), "homepage cross-paper role explanation is missing");
+  check(fs.existsSync(path.join(root, "ALGORITHM-v6.md")), "frozen v6 specification is missing");
+  check(fs.existsSync(path.join(root, "audit-core-v7.js")), "v7 audit core is missing");
+  check(indexHtml.includes("同周任务不叠加"), "homepage v7 rule summary is missing");
+  check(indexHtml.includes("同一周不会同时承担报告和提问任务"),
+    "homepage weekly role separation explanation is missing");
+  check(indexHtml.includes('audit-core-v7.js?v=7'), "homepage does not load the v7 audit core");
+  check(verifyHtml.includes('audit-core-v7.js?v=7'), "verifier does not load the v7 audit core");
+  check(/paper-question-picker-web-v7/.test(appJs) && /appVersion:\s*7/.test(appJs),
+    "app does not use the v7 storage envelope");
   check(!/[?&]v=4(?:[\"'])/.test(indexHtml + verifyHtml + algorithmHtml), "HTML still loads v4 assets");
 
   function assertIdsExist(source, html, label) {
@@ -877,6 +1445,11 @@ v6LegacyDispatcherCompatibility();
 v6HistoryAndBackupRoundTrip();
 v6PresenterAttemptBoundary();
 const v6PropertyStats = v6PropertyAndReferenceChecks();
+fixedV7Vector();
+v7InputAndBoundaryChecks();
+v7EndToEndTamperingAndLegacyCompatibility();
+const v7PropertyCount = v7PropertyAndReferenceChecks();
+browserWiringAndMigrationChecks();
 privateInputDefaultsChecks();
 syntheticCourseTableChecks();
 propertyAndReferenceChecks();
@@ -885,3 +1458,4 @@ staticSiteChecks();
 console.log("PASS " + checks + " assertions in " + ((Date.now() - startedAt) / 1000).toFixed(2) + "s");
 console.log("v6 property sample: " + v6PropertyStats.retryingCases + "/512 required retries; maximum " +
   v6PropertyStats.maximumPresenterAttempts + "/4096 attempts");
+console.log("v7 property sample: " + v7PropertyCount + " deterministic schedules, all weekly roles disjoint");

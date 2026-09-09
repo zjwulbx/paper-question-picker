@@ -5,16 +5,21 @@
   const History = globalThis.HistoryCore;
   const Audit = globalThis.AuditCore;
   const Course = globalThis.CourseCore;
-  const STORAGE_KEY = "paper-question-picker-web-v6";
-  const HISTORY_STORAGE_KEY = "paper-question-picker-history-v6";
-  const PREVIOUS_STORAGE_KEY = "paper-question-picker-web-v5";
-  const PREVIOUS_HISTORY_STORAGE_KEY = "paper-question-picker-history-v5";
+  const REQUIRED_AUDIT_PROTOCOL = "paper-question-picker/v7";
+  const REQUIRED_SCHEDULE_ID = "variable-week-cyclic-weekly-disjoint-roles/v1";
+  const V7_CORE_ERROR = "v7 同周任务不叠加核心未正确载入，已停止生成。请强制刷新页面后重试。";
+  const STORAGE_KEY = "paper-question-picker-web-v7";
+  const HISTORY_STORAGE_KEY = "paper-question-picker-history-v7";
+  const PREVIOUS_STORAGE_KEY = "paper-question-picker-web-v6";
+  const PREVIOUS_HISTORY_STORAGE_KEY = "paper-question-picker-history-v6";
+  const V5_STORAGE_KEY = "paper-question-picker-web-v5";
+  const V5_HISTORY_STORAGE_KEY = "paper-question-picker-history-v5";
   const V4_STORAGE_KEY = "paper-question-picker-web-v4";
   const V4_HISTORY_STORAGE_KEY = "paper-question-picker-history-v4";
   const LEGACY_STORAGE_KEY = "paper-question-picker-web-v1";
   const LEGACY_HISTORY_STORAGE_KEY = "paper-question-picker-history-v1";
-  const QUARANTINE_STORAGE_KEY = "paper-question-picker-unreadable-v6";
-  const HISTORY_QUARANTINE_KEY = "paper-question-picker-unreadable-history-v6";
+  const QUARANTINE_STORAGE_KEY = "paper-question-picker-unreadable-v7";
+  const HISTORY_QUARANTINE_KEY = "paper-question-picker-unreadable-history-v7";
   const MAX_BACKUP_FILE_BYTES = 64 * 1024 * 1024;
   const MAX_AUDIT_FILE_BYTES = 64 * 1024 * 1024;
   const EXAMPLE_STUDENTS = Array.from({ length: 12 }, function anonymousStudent(_value, index) {
@@ -97,6 +102,12 @@
     blockedHistorySources: [],
   };
 
+  function isV7AuditCoreReady() {
+    return Boolean(Audit && Audit.PROTOCOL_ID === REQUIRED_AUDIT_PROTOCOL &&
+      Audit.FORMAT_VERSION === 7 && Audit.SCHEDULE_ID === REQUIRED_SCHEDULE_ID &&
+      typeof Audit.canonicalizeInput === "function" && typeof Audit.createAuditedSchedule === "function");
+  }
+
   function parseLines(value) {
     return Audit.parseTextLines(String(value));
   }
@@ -136,7 +147,7 @@
   function verifyStoredSchedule(candidate) {
     if (!Core.verifySchedule(candidate)) return false;
     // Historical v1-v3 schedules had neither audit data nor week labels. A
-    // labeled v6-shaped schedule without its audit block is only a deterministic
+    // labeled variable-week schedule without its audit block is only a deterministic
     // test artifact and must not enter private backups as an unverifiable draw.
     if (!candidate.audit) return !Course.isStructuredSchedule(candidate);
     try {
@@ -154,6 +165,7 @@
     let courseRows = [];
     let excludedRows = [];
     const errors = [];
+    if (!isV7AuditCoreReady()) errors.push(V7_CORE_ERROR);
     try {
       students = parseLines(elements.studentsInput.value);
     } catch (error) {
@@ -167,7 +179,7 @@
     errors.push.apply(errors, parsedCourse.errors);
     const duplicateStudents = findDuplicates(students);
     const duplicatePapers = findDuplicates(papers);
-    if (students.length < 9) errors.push("至少需要 9 名学生。");
+    if (students.length < 12) errors.push("至少需要 12 名学生。");
     if (papers.length !== students.length) {
       errors.push("论文数需与学生数一致：当前 " + students.length + " 名学生、" + papers.length + " 篇论文。");
     }
@@ -177,8 +189,8 @@
       if (week.papers.length !== 3 && week.papers.length !== 4) {
         errors.push(week.label + "有 " + week.papers.length + " 篇有效论文；每周必须恰好为 3 或 4 篇。");
       }
-      if (week.papers.length * 3 > students.length) {
-        errors.push(week.label + "需要 " + (week.papers.length * 3) + " 位互不重复的提问人，当前学生不足。");
+      if (week.papers.length * 4 > students.length) {
+        errors.push(week.label + "需要 " + (week.papers.length * 4) + " 位互不重复的报告人与提问人，当前学生不足。");
       }
     });
     if (!errors.length) {
@@ -212,7 +224,7 @@
     if (state.storageWriteBlocked) return false;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        appVersion: 6,
+        appVersion: 7,
         scheduleKind: scheduleKindForSchedule(state.schedule),
         studentText: elements.studentsInput.value,
         paperText: elements.papersInput.value,
@@ -264,6 +276,9 @@
       const previousSource = sources.find(function findPrevious(source) {
         return source.key === PREVIOUS_HISTORY_STORAGE_KEY;
       });
+      const v5Source = sources.find(function findV5(source) {
+        return source.key === V5_HISTORY_STORAGE_KEY;
+      });
       const v4Source = sources.find(function findV4(source) {
         return source.key === V4_HISTORY_STORAGE_KEY;
       });
@@ -276,6 +291,7 @@
         capturedAt: new Date().toISOString(),
         current: currentSource ? currentSource.raw : null,
         previous: previousSource ? previousSource.raw : null,
+        v5: v5Source ? v5Source.raw : null,
         v4: v4Source ? v4Source.raw : null,
         legacy: legacySource ? legacySource.raw : null,
         sources: sources,
@@ -333,12 +349,14 @@
   function readArchivesFromStorage() {
     const current = historySource(HISTORY_STORAGE_KEY);
     const previous = historySource(PREVIOUS_HISTORY_STORAGE_KEY);
+    const v5 = historySource(V5_HISTORY_STORAGE_KEY);
     const v4 = historySource(V4_HISTORY_STORAGE_KEY);
     const legacy = historySource(LEGACY_HISTORY_STORAGE_KEY);
     let sessions = current.sessions;
-    const failures = [current.failure, previous.failure, v4.failure, legacy.failure].filter(Boolean);
+    const failures = [current.failure, previous.failure, v5.failure, v4.failure, legacy.failure].filter(Boolean);
     [
       { key: PREVIOUS_HISTORY_STORAGE_KEY, source: previous },
+      { key: V5_HISTORY_STORAGE_KEY, source: v5 },
       { key: V4_HISTORY_STORAGE_KEY, source: v4 },
       { key: LEGACY_HISTORY_STORAGE_KEY, source: legacy },
     ].forEach(function mergeOlder(entry) {
@@ -379,6 +397,9 @@
       }) || null,
       previous: state.blockedHistorySources.find(function previousSource(source) {
         return source.key === PREVIOUS_HISTORY_STORAGE_KEY;
+      }) || null,
+      v5: state.blockedHistorySources.find(function v5Source(source) {
+        return source.key === V5_HISTORY_STORAGE_KEY;
       }) || null,
       v4: state.blockedHistorySources.find(function v4Source(source) {
         return source.key === V4_HISTORY_STORAGE_KEY;
@@ -460,11 +481,15 @@
     elements.papersInput.value = "";
     let raw = null;
     try {
-      let sourceVersion = 6;
+      let sourceVersion = 7;
       raw = localStorage.getItem(STORAGE_KEY);
       if (raw === null) {
-        sourceVersion = 5;
+        sourceVersion = 6;
         raw = localStorage.getItem(PREVIOUS_STORAGE_KEY);
+      }
+      if (raw === null) {
+        sourceVersion = 5;
+        raw = localStorage.getItem(V5_STORAGE_KEY);
       }
       if (raw === null) {
         sourceVersion = 4;
@@ -477,6 +502,7 @@
       if (raw === null) return;
       const saved = JSON.parse(raw);
       if (!saved || typeof saved !== "object") throw new Error("当前进度格式不正确。");
+      if (sourceVersion === 7 && saved.appVersion !== 7) throw new Error("当前进度版本不受支持。");
       if (sourceVersion === 6 && saved.appVersion !== 6) throw new Error("当前进度版本不受支持。");
       if (sourceVersion === 5 && saved.appVersion !== 5) throw new Error("当前进度版本不受支持。");
       if (sourceVersion === 4 && saved.appVersion !== 4) throw new Error("旧版当前进度版本不受支持。");
@@ -497,7 +523,7 @@
       const savedLineParser = sourceVersion === 1 || saved.scheduleKind === "legacy-v3"
         ? parseLegacyLines
         : parseLines;
-      const paperTextMatches = saved.scheduleKind === "audited-v6"
+      const paperTextMatches = (saved.scheduleKind === "audited-v7" || saved.scheduleKind === "audited-v6")
         ? Course.paperTextMatchesSchedule(paperText, saved.schedule)
         : arraysEqual(savedLineParser(paperText), saved.schedule.weeks.flatMap(function getPapers(week) {
             return week.assignments.map(function getPaper(assignment) { return assignment.paper; });
@@ -511,6 +537,9 @@
         ? Math.min(Math.max(Math.floor(restoredWeek), 0), saved.schedule.weeks.length - 1)
         : 0;
       state.sessionId = typeof saved.sessionId === "string" ? saved.sessionId : null;
+      if (!usesV7WeeklyRoleRule(saved.schedule)) {
+        setStatus("已恢复原有抽签安排；旧结果不会被新规则改写。" + oldRuleNotice(saved.schedule));
+      }
     } catch (_error) {
       state.storageWriteBlocked = true;
       state.blockedCurrentRaw = raw;
@@ -625,9 +654,20 @@
     return Boolean(schedule && schedule.audit && typeof schedule.audit === "object");
   }
 
+  function usesV7WeeklyRoleRule(schedule) {
+    return Boolean(schedule && schedule.audit && schedule.audit.protocolId === "paper-question-picker/v7");
+  }
+
+  function oldRuleNotice(schedule) {
+    return schedule && !usesV7WeeklyRoleRule(schedule)
+      ? " 这是旧版安排；如需同周任务不叠加，请点击“修改名单并重新生成”。"
+      : "";
+  }
+
   function scheduleKindForSchedule(schedule) {
     if (!schedule) return "none";
     if (!hasAuditMetadata(schedule)) return "legacy-v3";
+    if (schedule.audit.protocolId === "paper-question-picker/v7") return "audited-v7";
     if (schedule.audit.protocolId === "paper-question-picker/v6") return "audited-v6";
     if (schedule.audit.protocolId === "paper-question-picker/v5") return "audited-v5";
     if (schedule.audit.protocolId === "paper-question-picker/v4") return "audited-v4";
@@ -664,7 +704,7 @@
             </article>`;
           }).join("")}
         </div>
-        <div class="principle"><strong>分配原则：</strong>每人全程恰好报告 1 篇、提问 3 次；同篇论文的报告人与提问人不重复。</div>
+        <div class="principle"><strong>分配原则：</strong>每人全程恰好报告 1 篇、提问 3 次；同一周一人最多承担一个角色。</div>
       </div>`;
   }
 
@@ -701,8 +741,11 @@
     const completionBanner = completeAll
       ? `<div class="completion-banner"><span class="trophy" aria-hidden="true">★</span><div><h2>全部抽签完成</h2><p>${state.schedule.students.length} 篇论文已全部揭晓，${hasPresenters ? "每位学生恰好报告 1 篇、提问 3 次。" : "每位学生恰好提问 3 次；此旧版安排不含报告人。"}</p></div></div>`
       : "";
+    const oldRuleBanner = usesV7WeeklyRoleRule(state.schedule)
+      ? ""
+      : '<div class="status-note"><span aria-hidden="true">!</span><span><strong>当前是旧版安排：</strong>不保证报告人与提问人在同一周不重叠。若要采用新规则，请点击“修改名单并重新生成”。</span></div>';
 
-    elements.stage.innerHTML = `${completionBanner}
+    elements.stage.innerHTML = `${oldRuleBanner}${completionBanner}
       <section class="card stage-card">
         <div class="stage-head">
           <div class="week-title"><span class="week-number">${state.activeWeek + 1}</span><div><h2>${escapeHtml(weekLabel)}</h2><p>${hasPresenters ? weekSize + " 篇论文 · " + weekSize + " 个报告名额 · " + (weekSize * 3) + " 个提问名额" : weekSize + " 篇论文 · " + (weekSize * 3) + " 个提问名额 · 旧版无报告人"}</p></div></div>
@@ -831,9 +874,12 @@
       const operations = session.operations.slice().reverse();
       const statusClass = complete ? "success" : isCurrent ? "current" : "neutral";
       const statusText = complete ? "✓ 已完成" : isCurrent ? "● 当前进度" : "可恢复";
-      const protocolVersion = session.schedule.audit && session.schedule.audit.protocolId === "paper-question-picker/v6"
-        ? "v6（可变周次）"
-        : scheduleHasPresenters(session.schedule) ? "v5（含报告人）" : "v4（仅提问人）";
+      const protocolId = session.schedule.audit && session.schedule.audit.protocolId;
+      const protocolVersion = protocolId === "paper-question-picker/v7"
+        ? "v7（同周角色不重叠）"
+        : protocolId === "paper-question-picker/v6"
+          ? "v6（可变周次）"
+          : scheduleHasPresenters(session.schedule) ? "v5（含报告人）" : "v4（仅提问人）";
       const auditLabel = hasAuditMetadata(session.schedule)
         ? protocolVersion + " · " +
           "承诺 " + escapeHtml(session.schedule.audit.commitment.slice(0, 12)) + "…" +
@@ -929,9 +975,11 @@
     }
 
     elements.commitmentCode.textContent = audit.commitment;
-    const protocolLabel = audit.protocolId === "paper-question-picker/v6"
-      ? "v6 分周提问+报告协议"
-      : scheduleHasPresenters(state.schedule) ? "v5 提问+报告协议" : "v4 仅提问协议";
+    const protocolLabel = audit.protocolId === "paper-question-picker/v7"
+      ? "v7 同周角色不重叠协议"
+      : audit.protocolId === "paper-question-picker/v6"
+        ? "v6 分周提问+报告协议"
+        : scheduleHasPresenters(state.schedule) ? "v5 提问+报告协议" : "v4 仅提问协议";
     elements.commitmentInputSummary.textContent = state.schedule.students.length + " 名学生 · " +
       state.schedule.students.length + " 篇有效论文 · " + state.schedule.weeks.length + " 周 · " +
       protocolLabel +
@@ -969,11 +1017,16 @@
   }
 
   function generateSchedule() {
+    if (!isV7AuditCoreReady()) {
+      setStatus(V7_CORE_ERROR);
+      refreshInputs(true);
+      return;
+    }
     const result = validation();
     if (result.errors.length || state.revealing || state.generating || state.importing) return;
     if (state.storageWriteBlocked || state.historyWriteBlocked) {
       if (!window.confirm(
-        "检测到无法读取的旧进度或历史。继续生成会先把原始数据另存为隔离副本，再创建新的 v6 进度。\n\n确定继续吗？",
+        "检测到无法读取的旧进度或历史。继续生成会先把原始数据另存为隔离副本，再创建新的 v7 进度。\n\n确定继续吗？",
       )) return;
       if (!preserveUnreadableCurrent() || !preserveUnreadableHistory()) return;
     }
@@ -984,11 +1037,17 @@
     elements.exampleButton.disabled = true;
     elements.clearButton.disabled = true;
     elements.generateButton.innerHTML = '<span class="pulse" aria-hidden="true">✦</span> 正在分配角色…';
-    setStatus("正在平衡提问次数并匹配报告人…");
+    setStatus("正在生成同周角色不重叠的均衡安排…");
     state.timer = window.setTimeout(function finishGenerate() {
       try {
         elements.studentsInput.value = result.students.join("\n");
-        state.schedule = Audit.createAuditedSchedule(result.students, result.courseWeeks);
+        const generatedSchedule = Audit.createAuditedSchedule(result.students, result.courseWeeks);
+        if (!generatedSchedule || !generatedSchedule.audit ||
+            generatedSchedule.audit.protocolId !== REQUIRED_AUDIT_PROTOCOL ||
+            generatedSchedule.audit.scheduleId !== REQUIRED_SCHEDULE_ID) {
+          throw new Error(V7_CORE_ERROR);
+        }
+        state.schedule = generatedSchedule;
         state.activeWeek = 0;
         state.sessionId = null;
         const savedToHistory = recordHistory("generate", "生成完整提问人与报告人安排");
@@ -1202,8 +1261,10 @@
       "规模：" + receipt.studentCount + " 名学生 / " + receipt.paperCount + " 篇有效论文 / " +
         (receipt.weekCount || receipt.paperCount / 3) + " 周" +
         (Array.isArray(receipt.weekPaperCounts) ? "（" + receipt.weekPaperCounts.join("、") + " 篇）" : ""),
-      receipt.version >= 5
-        ? "规则：每篇 1 位报告人 + 3 位提问人；每人恰好报告 1 篇、提问 3 次；同篇两种角色不重复。"
+      receipt.version >= 7
+        ? "规则：每篇 1 位报告人 + 3 位提问人；每人恰好报告 1 篇、提问 3 次；同一周一人最多承担一个角色。"
+        : receipt.version >= 5
+          ? "规则：每篇 1 位报告人 + 3 位提问人；每人恰好报告 1 篇、提问 3 次；同篇两种角色不重复。"
         : "规则：v4 旧协议仅分配提问人，不包含报告人。",
       "生成时间（本机自报）：" + receipt.issuedAt,
       "请保存本消息与 JSON 凭证。课程结束后可在本地验证器中与完整审计报告交叉核对。",
@@ -1349,10 +1410,12 @@
     return {
       current: localStorage.getItem(STORAGE_KEY),
       previousCurrent: localStorage.getItem(PREVIOUS_STORAGE_KEY),
+      v5Current: localStorage.getItem(V5_STORAGE_KEY),
       v4Current: localStorage.getItem(V4_STORAGE_KEY),
       legacyCurrent: localStorage.getItem(LEGACY_STORAGE_KEY),
       history: localStorage.getItem(HISTORY_STORAGE_KEY),
       previousHistory: localStorage.getItem(PREVIOUS_HISTORY_STORAGE_KEY),
+      v5History: localStorage.getItem(V5_HISTORY_STORAGE_KEY),
       v4History: localStorage.getItem(V4_HISTORY_STORAGE_KEY),
       legacyHistory: localStorage.getItem(LEGACY_HISTORY_STORAGE_KEY),
     };
@@ -1361,10 +1424,12 @@
   function importStorageRevisionMatches(revision) {
     return localStorage.getItem(STORAGE_KEY) === revision.current &&
       localStorage.getItem(PREVIOUS_STORAGE_KEY) === revision.previousCurrent &&
+      localStorage.getItem(V5_STORAGE_KEY) === revision.v5Current &&
       localStorage.getItem(V4_STORAGE_KEY) === revision.v4Current &&
       localStorage.getItem(LEGACY_STORAGE_KEY) === revision.legacyCurrent &&
       localStorage.getItem(HISTORY_STORAGE_KEY) === revision.history &&
       localStorage.getItem(PREVIOUS_HISTORY_STORAGE_KEY) === revision.previousHistory &&
+      localStorage.getItem(V5_HISTORY_STORAGE_KEY) === revision.v5History &&
       localStorage.getItem(V4_HISTORY_STORAGE_KEY) === revision.v4History &&
       localStorage.getItem(LEGACY_HISTORY_STORAGE_KEY) === revision.legacyHistory;
   }
@@ -1393,7 +1458,7 @@
       }));
       wroteHistory = true;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({
-        appVersion: 6,
+        appVersion: 7,
         scheduleKind: scheduleKindForSchedule(nextCurrent.schedule),
       }, nextCurrent)));
       wroteCurrent = true;
@@ -1645,7 +1710,8 @@
         : localCurrent.schedule
           ? "历史已合并，本页当前进度保持不变"
           : "学生和论文名单已恢复";
-      setStatus("完整备份导入成功：" + successDescription + "，共保留 " + nextArchives.length + " 次历史存档。");
+      setStatus("完整备份导入成功：" + successDescription + "，共保留 " + nextArchives.length + " 次历史存档。" +
+        oldRuleNotice(nextCurrent.schedule));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "备份导入失败，未更改本机数据。");
     } finally {
@@ -1684,9 +1750,9 @@
       "restore",
       "从 " + formatArchiveTime(selected.createdAt, false) + " 的存档恢复进度",
     );
-    setStatus(restoredInHistory
+    setStatus((restoredInHistory
       ? "历史进度已恢复，可以从原来的位置继续抽签。"
-      : "历史进度已恢复；当前进度会继续单独保存在本机。");
+      : "历史进度已恢复；当前进度会继续单独保存在本机。") + oldRuleNotice(state.schedule));
     renderAll();
     saveState();
     elements.stage.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1744,6 +1810,7 @@
 
   window.addEventListener("storage", function syncHistoryAcrossTabs(event) {
     if (event.key !== HISTORY_STORAGE_KEY && event.key !== PREVIOUS_HISTORY_STORAGE_KEY &&
+        event.key !== V5_HISTORY_STORAGE_KEY &&
         event.key !== V4_HISTORY_STORAGE_KEY &&
         event.key !== LEGACY_HISTORY_STORAGE_KEY) return;
     try {
@@ -1776,4 +1843,5 @@
   loadState();
   ensureCurrentArchive();
   renderAll();
+  if (!isV7AuditCoreReady()) setStatus(V7_CORE_ERROR);
 })();
