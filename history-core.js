@@ -1,16 +1,20 @@
 (function attachHistoryCore(root, factory) {
-  const api = factory();
+  let course = root && root.CourseCore;
+  if (typeof module === "object" && module.exports && typeof require === "function") {
+    course = require("./course-core.js");
+  }
+  const api = factory(course);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.HistoryCore = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createHistoryCore() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createHistoryCore(Course) {
   "use strict";
 
   const SCHEMA_VERSION = 1;
   const MAX_SESSIONS = 20;
   const MAX_OPERATIONS = 400;
   const BACKUP_FORMAT = "paper-question-picker-backup";
-  const BACKUP_VERSION = 2;
-  const LEGACY_BACKUP_VERSION = 1;
+  const BACKUP_VERSION = 3;
+  const LEGACY_BACKUP_VERSIONS = new Set([1, 2]);
   const BACKUP_CLASSIFICATION = "PRIVATE_RECOVERY_SECRET";
   let fallbackSessionCounter = 0;
 
@@ -62,6 +66,18 @@
     });
   }
 
+  function paperTextMatchesSchedule(value, schedule) {
+    return Course && typeof Course.paperTextMatchesSchedule === "function"
+      ? Course.paperTextMatchesSchedule(value, schedule)
+      : arraysEqual(parseLines(value), schedulePapers(schedule));
+  }
+
+  function paperTextForSchedule(schedule) {
+    return Course && typeof Course.paperTextForSchedule === "function"
+      ? Course.paperTextForSchedule(schedule)
+      : schedulePapers(schedule).join("\n");
+  }
+
   function schedulePlanSignature(schedule) {
     if (!schedule || typeof schedule !== "object") return null;
     const auditIdentity = schedule.audit && typeof schedule.audit === "object"
@@ -78,13 +94,14 @@
         return [student.id, student.name];
       }) : null,
       weeks: Array.isArray(schedule.weeks) ? schedule.weeks.map(function weekRow(week) {
-        return [week.id, Array.isArray(week.assignments) ? week.assignments.map(function assignmentRow(assignment) {
+        return [week.id, typeof week.label === "string" ? week.label : null,
+          Array.isArray(week.assignments) ? week.assignments.map(function assignmentRow(assignment) {
           return [
             assignment.paper,
             assignment.studentIds,
             Object.hasOwn(assignment, "presenterId") ? assignment.presenterId : null,
           ];
-        }) : null];
+          }) : null];
       }) : null,
     });
   }
@@ -116,9 +133,7 @@
 
     const schedule = clone(candidate.schedule);
     const names = scheduleNames(schedule);
-    const papers = schedulePapers(schedule);
     const candidateStudents = parseLines(candidate.studentText);
-    const candidatePapers = parseLines(candidate.paperText);
     const createdAt = validIso(candidate.createdAt, validIso(schedule.createdAt, fallbackNow));
     const updatedAt = validIso(candidate.updatedAt, createdAt);
     const operations = Array.isArray(candidate.operations)
@@ -133,7 +148,9 @@
       createdAt: createdAt,
       updatedAt: updatedAt,
       studentText: arraysEqual(candidateStudents, names) ? candidate.studentText : names.join("\n"),
-      paperText: arraysEqual(candidatePapers, papers) ? candidate.paperText : papers.join("\n"),
+      paperText: paperTextMatchesSchedule(candidate.paperText, schedule)
+        ? candidate.paperText
+        : paperTextForSchedule(schedule),
       schedule: schedule,
       activeWeek: clampWeek(candidate.activeWeek, schedule),
       operations: operations,
@@ -337,6 +354,9 @@
         if (!week.revealed[paperIndex]) return [];
         return [{
           week: weekIndex + 1,
+          weekLabel: typeof week.label === "string" && week.label.trim()
+            ? week.label
+            : "第 " + (weekIndex + 1) + " 周",
           paper: assignment.paper,
           presenter: Object.hasOwn(assignment, "presenterId") ? names[assignment.presenterId] : null,
           names: assignment.studentIds.map(function studentName(id) { return names[id]; }),
@@ -362,10 +382,9 @@
 
     const schedule = clone(candidate.schedule);
     const names = scheduleNames(schedule);
-    const papers = schedulePapers(schedule);
     return {
       studentText: arraysEqual(parseLines(studentText), names) ? studentText : names.join("\n"),
-      paperText: arraysEqual(parseLines(paperText), papers) ? paperText : papers.join("\n"),
+      paperText: paperTextMatchesSchedule(paperText, schedule) ? paperText : paperTextForSchedule(schedule),
       schedule: schedule,
       activeWeek: clampWeek(candidate.activeWeek, schedule),
       sessionId: safeId(candidate.sessionId),
@@ -413,10 +432,9 @@
       }
 
       const names = scheduleNames(session.schedule);
-      const papers = schedulePapers(session.schedule);
       if (
         !arraysEqual(parseLines(session.studentText), names) ||
-        !arraysEqual(parseLines(session.paperText), papers) ||
+        !paperTextMatchesSchedule(session.paperText, session.schedule) ||
         session.operations.some(function invalidOperation(operation) {
           const normalized = normalizeOperation(operation, parsedAt);
           return !normalized || normalized.type !== operation.type ||
@@ -461,7 +479,7 @@
       candidate.activeWeek >= candidate.schedule.weeks.length ||
       !(candidate.sessionId === null || safeId(candidate.sessionId)) ||
       !arraysEqual(parseLines(candidate.studentText), scheduleNames(candidate.schedule)) ||
-      !arraysEqual(parseLines(candidate.paperText), schedulePapers(candidate.schedule))
+      !paperTextMatchesSchedule(candidate.paperText, candidate.schedule)
     ) {
       throw new Error("备份文件中的当前进度已经损坏。");
     }
@@ -511,10 +529,10 @@
     if (!candidate || typeof candidate !== "object" || candidate.format !== BACKUP_FORMAT) {
       throw new Error("这不是论文提问抽签的完整备份文件。");
     }
-    if (candidate.version !== BACKUP_VERSION && candidate.version !== LEGACY_BACKUP_VERSION) {
+    if (candidate.version !== BACKUP_VERSION && !LEGACY_BACKUP_VERSIONS.has(candidate.version)) {
       throw new Error("备份文件版本不受支持，请确认导入网站与备份文件版本匹配。");
     }
-    if (candidate.version === BACKUP_VERSION && candidate.classification !== BACKUP_CLASSIFICATION) {
+    if (candidate.version >= 2 && candidate.classification !== BACKUP_CLASSIFICATION) {
       throw new Error("私密备份缺少安全分类标记，未导入任何内容。");
     }
     if (!isCanonicalIso(candidate.exportedAt)) {

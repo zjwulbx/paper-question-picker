@@ -21,7 +21,7 @@
     <meta property="og:image" content="https://zjwulbx.github.io/paper-question-picker/og.png" />
     <title>论文提问抽签</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
   </head>
   <body>
     <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -51,20 +51,20 @@
         <div class="hero-copy">
           <div class="eyebrow"><span aria-hidden="true">✦</span> 提问均衡 · 报告一人一篇</div>
           <h1 id="hero-title">愿每一次讨论，都能带来新的启发与收获</h1>
-          <p>每周三篇论文，每篇随机分配 1 位报告人和 3 位提问人。每人全程恰好报告 1 篇、提问 3 次；同篇论文两种角色不重复，结果可在课后本地复核。</p>
+          <p>每周可安排 3 或 4 篇论文，每篇随机分配 1 位报告人和 3 位提问人。每人全程恰好报告 1 篇、提问 3 次；同篇论文两种角色不重复，结果可在课后本地复核。</p>
         </div>
         <div class="metrics" aria-label="课程概况">
           <div class="metric">
             <span class="metric-label">学生</span>
-            <strong id="metric-students">12</strong>
+            <strong id="metric-students">—</strong>
           </div>
           <div class="metric">
             <span class="metric-label">论文</span>
-            <strong id="metric-papers">12</strong>
+            <strong id="metric-papers">—</strong>
           </div>
           <div class="metric">
             <span class="metric-label">周课程</span>
-            <strong id="metric-weeks">4</strong>
+            <strong id="metric-weeks">—</strong>
           </div>
         </div>
       </section>
@@ -74,7 +74,7 @@
           <div class="card-head">
             <div>
               <h2>课程设置</h2>
-              <p id="settings-subtitle">每行输入一位学生和一篇论文</p>
+              <p id="settings-subtitle">学生逐行填写；课程表按周次、论文和状态粘贴</p>
             </div>
             <span id="settings-badge" class="badge success">✓ 可开始</span>
           </div>
@@ -82,17 +82,22 @@
             <div class="field">
               <div class="field-head">
                 <label for="students-input">学生名单</label>
-                <span id="student-count">12 人</span>
+                <span id="student-count">0 人</span>
               </div>
-              <textarea id="students-input" rows="9" spellcheck="false"></textarea>
+              <textarea id="students-input" rows="9" spellcheck="false" placeholder="每行一位学生，请在此粘贴实际名单"></textarea>
             </div>
 
             <div class="field">
               <div class="field-head">
-                <label for="papers-input">论文列表</label>
-                <span id="paper-count">12 篇</span>
+                <label for="papers-input">课程论文安排</label>
+                <span id="paper-count">0 篇</span>
               </div>
-              <textarea id="papers-input" rows="7" spellcheck="false"></textarea>
+              <textarea id="papers-input" rows="11" spellcheck="false" aria-describedby="course-format-hint"></textarea>
+              <p id="course-format-hint" class="field-hint">三列用 Tab 分隔：周次/日期、论文标题、状态。状态留空为有效，写“取消”则排除；同一周后续行的周次可留空。旧版逐行论文列表仍可读取，并按每 3 篇自动分周。</p>
+              <details id="course-preview" class="course-preview">
+                <summary id="course-preview-summary">等待读取课程表</summary>
+                <div id="course-preview-list" class="course-preview-list"></div>
+              </details>
             </div>
 
             <div id="validation-box" class="validation" role="alert" hidden></div>
@@ -109,7 +114,7 @@
               <span aria-hidden="true">·</span>
               <button id="clear-button" class="button text muted" type="button">清空</button>
             </div>
-            <p id="save-note" class="save-note">系统先生成全程安排，确保每人恰好报告一篇。</p>
+            <p id="save-note" class="save-note">学生名单与论文安排只保存在当前浏览器及你导出的私密备份中，不会上传。</p>
           </div>
         </aside>
 
@@ -139,7 +144,7 @@
                     <span class="visibility-chip public">可发班级群</span>
                   </div>
                   <output id="commitment-code" class="commitment-code" aria-live="polite"></output>
-                  <p>承诺码锁定本次输入、私密种子和完整预排结果；上述内容若在公开后改动，验证就会失败。</p>
+                  <p>承诺码锁定学生名单、有效论文及其分周结构、私密种子和完整预排结果；上述内容若在公开后改动，验证就会失败。标记“取消”的行不参与抽签。</p>
                 </section>
 
                 <section class="commitment-panel" aria-labelledby="commitment-summary-label">
@@ -162,7 +167,7 @@
               <details class="verification-method" open>
                 <summary>算法如何做到可验证？</summary>
                 <ol class="verification-steps">
-                  <li><strong>锁定输入</strong><span>规范化学生名单与论文列表，生成输入摘要。</span></li>
+                  <li><strong>锁定输入</strong><span>规范化学生名单与有效论文的分周结构，生成输入摘要。</span></li>
                   <li><strong>提前承诺</strong><span>用私密随机种子生成全程安排；在种子保密时，公开承诺码在现实中无法用于反推内容。</span></li>
                   <li><strong>依次揭晓</strong><span>提问人按最低次数优先且同周不重复；报告人全程一人一篇，不与本篇提问人重复。</span></li>
                   <li><strong>课后复核</strong><span>全部结束后公开种子，用本地验证器重算并核对承诺与结果。</span></li>
@@ -205,7 +210,7 @@
               </div>
             </div>
             <div id="archive-list" class="archive-list"></div>
-            <p class="archive-note"><strong>备份提示：</strong>JSON 备份可放入可信的微信文件或私有网盘，换设备后再导入。它始终是私密恢复文件，含验证种子、姓名和完整预排结果，请勿发群或公开分享；班级核验请使用课程结束后导出的审计报告。<span>v1–v3 旧记录不可重放验证；v4 记录可验证原提问安排，但不含报告人。</span></p>
+            <p class="archive-note"><strong>备份提示：</strong>JSON 备份可放入可信的微信文件或私有网盘，换设备后再导入。它始终是私密恢复文件，含验证种子、姓名、课程表和完整预排结果，请勿发群或公开分享；班级核验请使用课程结束后导出的审计报告。<span>v1–v3 旧记录不可重放验证；v4 可验证原提问安排但不含报告人，v5 仍可按固定三篇分周协议验证。</span></p>
             <p class="storage-origin-note"><strong>本机隐私：</strong>未揭晓安排会保存在当前浏览器。请使用受控设备；同一 <code>zjwulbx.github.io</code> 域名下的其他 Pages 项目理论上共享这份浏览器存储，长期使用建议配置本应用独占域名。</p>
           </section>
 
@@ -245,9 +250,11 @@
       </section>
     </main>
 
-    <script src="lottery-core.js?v=5"></script>
-    <script src="history-core.js?v=5"></script>
-    <script src="audit-core.js?v=5"></script>
-    <script src="app.js?v=5"></script>
+    <script src="course-core.js?v=6"></script>
+    <script src="lottery-core.js?v=6"></script>
+    <script src="history-core.js?v=6"></script>
+    <script src="audit-core.js?v=6"></script>
+    <script src="audit-core-v6.js?v=6"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>

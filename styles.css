@@ -315,6 +315,81 @@ textarea:disabled {
   opacity: 0.68;
 }
 
+.field-hint {
+  margin: 7px 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.course-preview {
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.course-preview > summary {
+  padding: 9px 11px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.course-preview-list {
+  display: grid;
+  max-height: 360px;
+  gap: 10px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  padding: 11px;
+}
+
+.course-preview-week {
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: var(--paper);
+}
+
+.course-preview-week > strong,
+.course-preview-week > span {
+  display: block;
+}
+
+.course-preview-week > strong {
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.course-preview-week > span {
+  margin-top: 2px;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.course-preview-week ol {
+  margin: 7px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.cancelled-row {
+  color: var(--red);
+  opacity: 0.74;
+}
+
+.cancelled-row em {
+  margin-left: 5px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .button {
   display: inline-flex;
   min-height: 40px;
@@ -541,6 +616,10 @@ textarea:disabled {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .week-tab.complete {
@@ -559,6 +638,10 @@ textarea:disabled {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+}
+
+.paper-grid.four-paper-week {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .placeholder-grid {
@@ -1625,6 +1708,10 @@ tbody td:first-child {
     grid-template-columns: 1fr;
   }
 
+  .paper-grid.four-paper-week {
+    grid-template-columns: 1fr;
+  }
+
   .paper-card {
     min-height: 0;
   }
@@ -1659,6 +1746,10 @@ tbody td:first-child {
 
   .paper-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .paper-grid.four-paper-week {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1704,6 +1795,10 @@ tbody td:first-child {
   }
 
   .paper-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .paper-grid.four-paper-week {
     grid-template-columns: 1fr;
   }
 

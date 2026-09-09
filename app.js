@@ -4,30 +4,36 @@
   const Core = globalThis.LotteryCore;
   const History = globalThis.HistoryCore;
   const Audit = globalThis.AuditCore;
-  const STORAGE_KEY = "paper-question-picker-web-v5";
-  const HISTORY_STORAGE_KEY = "paper-question-picker-history-v5";
-  const PREVIOUS_STORAGE_KEY = "paper-question-picker-web-v4";
-  const PREVIOUS_HISTORY_STORAGE_KEY = "paper-question-picker-history-v4";
+  const Course = globalThis.CourseCore;
+  const STORAGE_KEY = "paper-question-picker-web-v6";
+  const HISTORY_STORAGE_KEY = "paper-question-picker-history-v6";
+  const PREVIOUS_STORAGE_KEY = "paper-question-picker-web-v5";
+  const PREVIOUS_HISTORY_STORAGE_KEY = "paper-question-picker-history-v5";
+  const V4_STORAGE_KEY = "paper-question-picker-web-v4";
+  const V4_HISTORY_STORAGE_KEY = "paper-question-picker-history-v4";
   const LEGACY_STORAGE_KEY = "paper-question-picker-web-v1";
   const LEGACY_HISTORY_STORAGE_KEY = "paper-question-picker-history-v1";
-  const QUARANTINE_STORAGE_KEY = "paper-question-picker-unreadable-v5";
-  const HISTORY_QUARANTINE_KEY = "paper-question-picker-unreadable-history-v5";
+  const QUARANTINE_STORAGE_KEY = "paper-question-picker-unreadable-v6";
+  const HISTORY_QUARANTINE_KEY = "paper-question-picker-unreadable-history-v6";
   const MAX_BACKUP_FILE_BYTES = 64 * 1024 * 1024;
   const MAX_AUDIT_FILE_BYTES = 64 * 1024 * 1024;
-  const EXAMPLE_STUDENTS = [
-    "陈晨", "林一凡", "周子涵", "宋雨桐", "许嘉宁", "赵可心",
-    "王启明", "李思远", "张若琳", "吴安然", "郑书言", "何清越",
-  ].join("\n");
-  const EXAMPLE_PAPERS = [
-    "大语言模型的涌现能力", "检索增强生成方法", "多智能体协作机制",
-    "思维链提示的可靠性", "小样本学习的新进展", "模型对齐与人类反馈",
-    "知识蒸馏的实践路径", "长上下文建模方法", "视觉语言模型评测",
-    "智能体工具使用能力", "合成数据与模型训练", "可解释人工智能研究",
+  const EXAMPLE_STUDENTS = Array.from({ length: 12 }, function anonymousStudent(_value, index) {
+    return "示例学生" + String(index + 1).padStart(2, "0");
+  }).join("\n");
+  const EXAMPLE_COURSE = [
+    "周次/日期\t论文标题\t状态",
+    "第 1 周\t大语言模型的涌现能力\t", "\t检索增强生成方法\t", "\t多智能体协作机制\t",
+    "第 2 周\t思维链提示的可靠性\t", "\t小样本学习的新进展\t", "\t模型对齐与人类反馈\t",
+    "第 3 周\t知识蒸馏的实践路径\t", "\t长上下文建模方法\t", "\t视觉语言模型评测\t",
+    "第 4 周\t智能体工具使用能力\t", "\t合成数据与模型训练\t", "\t可解释人工智能研究\t",
   ].join("\n");
 
   const elements = {
     studentsInput: document.querySelector("#students-input"),
     papersInput: document.querySelector("#papers-input"),
+    coursePreview: document.querySelector("#course-preview"),
+    coursePreviewSummary: document.querySelector("#course-preview-summary"),
+    coursePreviewList: document.querySelector("#course-preview-list"),
     studentCount: document.querySelector("#student-count"),
     paperCount: document.querySelector("#paper-count"),
     metricStudents: document.querySelector("#metric-students"),
@@ -129,7 +135,10 @@
 
   function verifyStoredSchedule(candidate) {
     if (!Core.verifySchedule(candidate)) return false;
-    if (!candidate.audit) return true;
+    // Historical v1-v3 schedules had neither audit data nor week labels. A
+    // labeled v6-shaped schedule without its audit block is only a deterministic
+    // test artifact and must not enter private backups as an unverifiable draw.
+    if (!candidate.audit) return !Course.isStructuredSchedule(candidate);
     try {
       Audit.createPublicReceipt(candidate);
       return true;
@@ -141,36 +150,55 @@
   function validation() {
     let students = [];
     let papers = [];
+    let courseWeeks = [];
+    let courseRows = [];
+    let excludedRows = [];
     const errors = [];
     try {
       students = parseLines(elements.studentsInput.value);
     } catch (error) {
       errors.push(error instanceof Error ? "学生名单：" + error.message : "学生名单包含无法处理的字符。");
     }
-    try {
-      papers = parseLines(elements.papersInput.value);
-    } catch (error) {
-      errors.push(error instanceof Error ? "论文列表：" + error.message : "论文列表包含无法处理的字符。");
-    }
+    const parsedCourse = Course.parseCourseInput(elements.papersInput.value);
+    courseWeeks = parsedCourse.weeks;
+    courseRows = parsedCourse.rows;
+    papers = parsedCourse.activePapers;
+    excludedRows = parsedCourse.excludedRows;
+    errors.push.apply(errors, parsedCourse.errors);
     const duplicateStudents = findDuplicates(students);
     const duplicatePapers = findDuplicates(papers);
-    if (students.length < 9) errors.push("至少需要 9 名学生，才能保证同一周 9 人不重复。");
-    if (students.length % 3 !== 0) errors.push("学生人数必须是 3 的倍数。");
+    if (students.length < 9) errors.push("至少需要 9 名学生。");
     if (papers.length !== students.length) {
       errors.push("论文数需与学生数一致：当前 " + students.length + " 名学生、" + papers.length + " 篇论文。");
     }
     if (duplicateStudents.length) errors.push("学生名单有重名：" + duplicateStudents.join("、") + "。请增加标识以便区分。");
     if (duplicatePapers.length) errors.push("论文列表有重复项：" + duplicatePapers.join("、") + "。");
+    courseWeeks.forEach(function validateWeek(week) {
+      if (week.papers.length !== 3 && week.papers.length !== 4) {
+        errors.push(week.label + "有 " + week.papers.length + " 篇有效论文；每周必须恰好为 3 或 4 篇。");
+      }
+      if (week.papers.length * 3 > students.length) {
+        errors.push(week.label + "需要 " + (week.papers.length * 3) + " 位互不重复的提问人，当前学生不足。");
+      }
+    });
     if (!errors.length) {
       try {
-        const canonical = Audit.canonicalizeInput(students, papers);
+        const canonical = Audit.canonicalizeInput(students, courseWeeks);
         students = canonical.students;
-        papers = canonical.papers;
+        courseWeeks = canonical.courseWeeks;
+        papers = courseWeeks.flatMap(function activePapers(week) { return week.papers; });
       } catch (error) {
         errors.push(error instanceof Error ? error.message : "输入不符合可验证抽签协议。");
       }
     }
-    return { students: students, papers: papers, errors: errors };
+    return {
+      students: students,
+      papers: papers,
+      courseWeeks: courseWeeks,
+      courseRows: courseRows,
+      excludedRows: excludedRows,
+      errors: errors,
+    };
   }
 
   function setStatus(message) {
@@ -184,7 +212,7 @@
     if (state.storageWriteBlocked) return false;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        appVersion: 5,
+        appVersion: 6,
         scheduleKind: scheduleKindForSchedule(state.schedule),
         studentText: elements.studentsInput.value,
         paperText: elements.papersInput.value,
@@ -236,6 +264,9 @@
       const previousSource = sources.find(function findPrevious(source) {
         return source.key === PREVIOUS_HISTORY_STORAGE_KEY;
       });
+      const v4Source = sources.find(function findV4(source) {
+        return source.key === V4_HISTORY_STORAGE_KEY;
+      });
       const legacySource = sources.find(function findLegacy(source) {
         return source.key === LEGACY_HISTORY_STORAGE_KEY;
       });
@@ -245,6 +276,7 @@
         capturedAt: new Date().toISOString(),
         current: currentSource ? currentSource.raw : null,
         previous: previousSource ? previousSource.raw : null,
+        v4: v4Source ? v4Source.raw : null,
         legacy: legacySource ? legacySource.raw : null,
         sources: sources,
         previousQuarantine: previousQuarantine,
@@ -284,7 +316,7 @@
     let raw = null;
     try {
       raw = localStorage.getItem(key);
-      if (!raw) return { sessions: [], failure: null, raw: raw };
+      if (raw === null) return { sessions: [], failure: null, raw: raw };
       return {
         sessions: History.parseHistoryPayload(JSON.parse(raw), verifyStoredSchedule),
         failure: null,
@@ -301,11 +333,13 @@
   function readArchivesFromStorage() {
     const current = historySource(HISTORY_STORAGE_KEY);
     const previous = historySource(PREVIOUS_HISTORY_STORAGE_KEY);
+    const v4 = historySource(V4_HISTORY_STORAGE_KEY);
     const legacy = historySource(LEGACY_HISTORY_STORAGE_KEY);
     let sessions = current.sessions;
-    const failures = [current.failure, previous.failure, legacy.failure].filter(Boolean);
+    const failures = [current.failure, previous.failure, v4.failure, legacy.failure].filter(Boolean);
     [
       { key: PREVIOUS_HISTORY_STORAGE_KEY, source: previous },
+      { key: V4_HISTORY_STORAGE_KEY, source: v4 },
       { key: LEGACY_HISTORY_STORAGE_KEY, source: legacy },
     ].forEach(function mergeOlder(entry) {
       const conflictingIds = new Set(entry.source.sessions.filter(function conflictsWithNewer(olderSession) {
@@ -345,6 +379,9 @@
       }) || null,
       previous: state.blockedHistorySources.find(function previousSource(source) {
         return source.key === PREVIOUS_HISTORY_STORAGE_KEY;
+      }) || null,
+      v4: state.blockedHistorySources.find(function v4Source(source) {
+        return source.key === V4_HISTORY_STORAGE_KEY;
       }) || null,
       legacy: state.blockedHistorySources.find(function legacySource(source) {
         return source.key === LEGACY_HISTORY_STORAGE_KEY;
@@ -419,22 +456,32 @@
   }
 
   function loadState() {
-    elements.studentsInput.value = EXAMPLE_STUDENTS;
-    elements.papersInput.value = EXAMPLE_PAPERS;
+    elements.studentsInput.value = "";
+    elements.papersInput.value = "";
     let raw = null;
     try {
-      const currentRaw = localStorage.getItem(STORAGE_KEY);
-      const previousRaw = currentRaw ? null : localStorage.getItem(PREVIOUS_STORAGE_KEY);
-      const legacyRaw = currentRaw || previousRaw ? null : localStorage.getItem(LEGACY_STORAGE_KEY);
-      const sourceVersion = currentRaw ? 5 : previousRaw ? 4 : 1;
-      raw = currentRaw || previousRaw || legacyRaw;
-      if (!raw) return;
+      let sourceVersion = 6;
+      raw = localStorage.getItem(STORAGE_KEY);
+      if (raw === null) {
+        sourceVersion = 5;
+        raw = localStorage.getItem(PREVIOUS_STORAGE_KEY);
+      }
+      if (raw === null) {
+        sourceVersion = 4;
+        raw = localStorage.getItem(V4_STORAGE_KEY);
+      }
+      if (raw === null) {
+        sourceVersion = 1;
+        raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      }
+      if (raw === null) return;
       const saved = JSON.parse(raw);
       if (!saved || typeof saved !== "object") throw new Error("当前进度格式不正确。");
+      if (sourceVersion === 6 && saved.appVersion !== 6) throw new Error("当前进度版本不受支持。");
       if (sourceVersion === 5 && saved.appVersion !== 5) throw new Error("当前进度版本不受支持。");
       if (sourceVersion === 4 && saved.appVersion !== 4) throw new Error("旧版当前进度版本不受支持。");
-      const studentText = typeof saved.studentText === "string" ? saved.studentText : EXAMPLE_STUDENTS;
-      const paperText = typeof saved.paperText === "string" ? saved.paperText : EXAMPLE_PAPERS;
+      const studentText = typeof saved.studentText === "string" ? saved.studentText : "";
+      const paperText = typeof saved.paperText === "string" ? saved.paperText : "";
       elements.studentsInput.value = studentText;
       elements.papersInput.value = paperText;
       if (saved.schedule === null || saved.schedule === undefined) {
@@ -447,13 +494,15 @@
       }
       if (!verifyStoredSchedule(saved.schedule)) throw new Error("当前抽签安排或审计数据已经损坏。");
       const names = saved.schedule.students.map(function getName(student) { return student.name; });
-      const papers = saved.schedule.weeks.flatMap(function getPapers(week) {
-        return week.assignments.map(function getPaper(assignment) { return assignment.paper; });
-      });
       const savedLineParser = sourceVersion === 1 || saved.scheduleKind === "legacy-v3"
         ? parseLegacyLines
         : parseLines;
-      if (!arraysEqual(savedLineParser(studentText), names) || !arraysEqual(savedLineParser(paperText), papers)) {
+      const paperTextMatches = saved.scheduleKind === "audited-v6"
+        ? Course.paperTextMatchesSchedule(paperText, saved.schedule)
+        : arraysEqual(savedLineParser(paperText), saved.schedule.weeks.flatMap(function getPapers(week) {
+            return week.assignments.map(function getPaper(assignment) { return assignment.paper; });
+          }));
+      if (!arraysEqual(savedLineParser(studentText), names) || !paperTextMatches) {
         throw new Error("保存的输入与抽签安排不一致。");
       }
       state.schedule = saved.schedule;
@@ -470,14 +519,44 @@
   }
 
   function refreshInputs(skipSave) {
-    const result = validation();
+    const lockedCourse = state.schedule ? Course.parseCourseInput(elements.papersInput.value) : null;
+    const result = state.schedule
+      ? {
+          students: state.schedule.students.map(function name(student) { return student.name; }),
+          courseWeeks: Course.courseWeeksFromSchedule(state.schedule),
+          papers: state.schedule.weeks.flatMap(function papers(week) {
+            return week.assignments.map(function paper(assignment) { return assignment.paper; });
+          }),
+          courseRows: lockedCourse && !lockedCourse.errors.length ? lockedCourse.rows : [],
+          excludedRows: lockedCourse && !lockedCourse.errors.length ? lockedCourse.excludedRows : [],
+          errors: [],
+        }
+      : validation();
     elements.studentCount.textContent = result.students.length + " 人";
-    elements.paperCount.textContent = result.papers.length + " 篇";
+    elements.paperCount.textContent = result.papers.length + " 篇有效" +
+      (result.excludedRows.length ? " · " + result.excludedRows.length + " 篇取消" : "");
     elements.metricStudents.textContent = result.students.length;
     elements.metricPapers.textContent = result.papers.length;
-    elements.metricWeeks.textContent = result.students.length >= 3 && result.students.length % 3 === 0
-      ? result.students.length / 3
-      : "—";
+    elements.metricWeeks.textContent = result.courseWeeks.length || "—";
+    elements.coursePreviewSummary.textContent = result.courseWeeks.length
+      ? result.courseWeeks.length + " 周 · " + result.papers.length + " 篇有效" +
+        (result.excludedRows.length ? " · 排除 " + result.excludedRows.length + " 篇" : "")
+      : "等待读取课程表";
+    elements.coursePreviewList.innerHTML = result.courseWeeks.length
+      ? result.courseWeeks.map(function previewWeek(week) {
+          const sourceRows = result.courseRows.filter(function sameWeek(row) { return row.label === week.label; });
+          const previewRows = sourceRows.length
+            ? sourceRows
+            : week.papers.map(function activeRow(paper) { return { paper: paper, active: true }; });
+          return `<section class="course-preview-week"><strong>${escapeHtml(week.label)}</strong><span>${week.papers.length} 篇有效</span>` +
+            `<ol>${previewRows.map(function previewPaper(row) {
+              return row.active
+                ? `<li>${escapeHtml(row.paper)}</li>`
+                : `<li class="cancelled-row"><s>${escapeHtml(row.paper)}</s><em>取消</em></li>`;
+            }).join("")}` +
+            `</ol></section>`;
+        }).join("")
+      : '<p class="empty-operation">请按三列课程表格式粘贴。</p>';
     elements.backupExportButton.disabled = state.importing || (state.archives.length === 0 && !state.schedule &&
       !elements.studentsInput.value.trim() && !elements.papersInput.value.trim());
     elements.backupImportButton.disabled = state.importing;
@@ -509,12 +588,12 @@
     elements.clearButton.disabled = busy;
     elements.resetTop.disabled = !locked || busy;
     elements.validationBox.hidden = locked || validation().errors.length === 0;
-    elements.settingsSubtitle.textContent = locked ? "本次抽签名单已锁定" : "每行输入一位学生和一篇论文";
+    elements.settingsSubtitle.textContent = locked ? "本次名单与分周课程表已锁定" : "学生逐行填写；课程表按周次、论文和状态粘贴";
     elements.settingsBadge.className = "badge " + (locked ? "neutral" : "success");
     elements.settingsBadge.textContent = locked ? "▣ 已锁定" : "✓ 可开始";
     elements.saveNote.textContent = locked
       ? "抽签结果与进度已自动保存在这台电脑。"
-      : "系统先生成全程安排，确保每人恰好报告一篇。";
+      : "学生名单与论文安排只保存在当前浏览器及你导出的私密备份中，不会上传。";
   }
 
   function getNameMap() {
@@ -549,6 +628,7 @@
   function scheduleKindForSchedule(schedule) {
     if (!schedule) return "none";
     if (!hasAuditMetadata(schedule)) return "legacy-v3";
+    if (schedule.audit.protocolId === "paper-question-picker/v6") return "audited-v6";
     if (schedule.audit.protocolId === "paper-question-picker/v5") return "audited-v5";
     if (schedule.audit.protocolId === "paper-question-picker/v4") return "audited-v4";
     return "audited-unsupported";
@@ -588,6 +668,19 @@
       </div>`;
   }
 
+  function paperOffsetForWeek(weekIndex) {
+    if (!state.schedule) return 0;
+    return state.schedule.weeks.slice(0, weekIndex).reduce(function countPapers(total, week) {
+      return total + week.assignments.length;
+    }, 0);
+  }
+
+  function weekLabelFor(week, weekIndex) {
+    return week && typeof week.label === "string" && week.label.trim()
+      ? week.label
+      : "第 " + (weekIndex + 1) + " 周";
+  }
+
   function renderStage() {
     if (!state.schedule) {
       renderEmptyStage();
@@ -598,6 +691,9 @@
     const weekComplete = week.revealed.every(Boolean);
     const completeAll = allComplete();
     const hasPresenters = scheduleHasPresenters(state.schedule);
+    const weekSize = week.assignments.length;
+    const weekLabel = weekLabelFor(week, state.activeWeek);
+    const paperOffset = paperOffsetForWeek(state.activeWeek);
     const unlockedThrough = firstIncompleteWeek();
     const revealDisabled = Boolean(state.revealing) || state.generating || state.importing ||
       !commitmentIsPublished(state.schedule);
@@ -609,7 +705,7 @@
     elements.stage.innerHTML = `${completionBanner}
       <section class="card stage-card">
         <div class="stage-head">
-          <div class="week-title"><span class="week-number">${state.activeWeek + 1}</span><div><h2>第 ${state.activeWeek + 1} 周</h2><p>${hasPresenters ? "3 篇论文 · 3 个报告名额 · 9 个提问名额" : "3 篇论文 · 9 个提问名额 · 旧版无报告人"}</p></div></div>
+          <div class="week-title"><span class="week-number">${state.activeWeek + 1}</span><div><h2>${escapeHtml(weekLabel)}</h2><p>${hasPresenters ? weekSize + " 篇论文 · " + weekSize + " 个报告名额 · " + (weekSize * 3) + " 个提问名额" : weekSize + " 篇论文 · " + (weekSize * 3) + " 个提问名额 · 旧版无报告人"}</p></div></div>
           <button class="button outline" type="button" data-action="reveal-week" ${weekComplete || revealDisabled ? "disabled" : ""}>
             <span aria-hidden="true">✦</span> ${weekComplete ? "本周已揭晓" : "全部揭晓本周"}
           </button>
@@ -619,12 +715,13 @@
             const complete = item.revealed.every(Boolean);
             const accessible = completeAll || index <= unlockedThrough;
             const className = index === state.activeWeek ? "active" : complete ? "complete" : "";
-            return `<button type="button" data-week="${index}" class="week-tab ${className}" ${!accessible || revealDisabled ? "disabled" : ""} ${index === state.activeWeek ? 'aria-current="step"' : ""}>${complete ? "✓ " : ""}第 ${index + 1} 周</button>`;
+            const label = weekLabelFor(item, index);
+            return `<button type="button" data-week="${index}" class="week-tab ${className}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" ${!accessible || revealDisabled ? "disabled" : ""} ${index === state.activeWeek ? 'aria-current="step"' : ""}>${complete ? "✓ " : ""}${escapeHtml(label)}</button>`;
           }).join("")}
         </div>
       </section>
 
-      <section class="paper-grid">
+      <section class="paper-grid ${weekSize === 4 ? "four-paper-week" : ""}">
         ${week.assignments.map(function assignmentCard(assignment, paperIndex) {
           const revealed = week.revealed[paperIndex];
           const revealing = state.revealing === "all" || state.revealing === state.activeWeek + "-" + paperIndex;
@@ -638,7 +735,7 @@
             return `<div class="slot ${revealed ? "revealed" : revealing ? "shuffling" : "waiting"}"><span>${revealed ? "✓" : slotIndex + 1}</span><b>${content}</b></div>`;
           }).join("");
           return `<article class="paper-card ${revealed ? "is-revealed" : ""}">
-            <div class="paper-top"><span class="paper-kicker">论文 ${String(state.activeWeek * 3 + paperIndex + 1).padStart(2, "0")}</span><span class="badge ${revealed ? "success" : "neutral"}">${revealed ? "✓ 已揭晓" : revealing ? "抽取中" : "待揭晓"}</span></div>
+            <div class="paper-top"><span class="paper-kicker">论文 ${String(paperOffset + paperIndex + 1).padStart(2, "0")}</span><span class="badge ${revealed ? "success" : "neutral"}">${revealed ? "✓ 已揭晓" : revealing ? "抽取中" : "待揭晓"}</span></div>
             <h3>${escapeHtml(assignment.paper)}</h3>
             <div class="presenter-slot ${!hasPresenters ? "unavailable" : revealed ? "revealed" : revealing ? "shuffling" : "waiting"}"><span>报告人</span><b>${presenterContent}</b></div>
             <div class="role-label">提问人</div>
@@ -650,7 +747,7 @@
 
       <section class="week-progress">
         <div class="progress-row">
-          <div><strong>本周进度 <em>${week.revealed.filter(Boolean).length} / 3 篇</em></strong><p>${weekComplete ? "本周 3 篇结果已全部揭晓，可以继续。" : hasPresenters ? "每篇会同时揭晓报告人与提问人。" : "此 v4 旧安排每篇只揭晓提问人。"}</p></div>
+          <div><strong>本周进度 <em>${week.revealed.filter(Boolean).length} / ${weekSize} 篇</em></strong><p>${weekComplete ? "本周 " + weekSize + " 篇结果已全部揭晓，可以继续。" : hasPresenters ? "每篇会同时揭晓报告人与提问人。" : "此旧版安排每篇只揭晓提问人。"}</p></div>
           <div class="progress-actions">
             <button class="button outline icon-button" type="button" data-action="previous" aria-label="上一周" ${state.activeWeek === 0 || revealDisabled ? "disabled" : ""}>‹</button>
             ${state.activeWeek < state.schedule.weeks.length - 1
@@ -658,7 +755,7 @@
               : `<span class="final-status ${completeAll ? "done" : ""}">${completeAll ? "✓ 全部完成" : "▣ 完成本周"}</span>`}
           </div>
         </div>
-        <div class="progress-track"><span style="width:${week.revealed.filter(Boolean).length / 3 * 100}%"></span></div>
+        <div class="progress-track"><span style="width:${week.revealed.filter(Boolean).length / weekSize * 100}%"></span></div>
       </section>`;
   }
 
@@ -676,7 +773,7 @@
       return;
     }
     elements.historyContent.innerHTML = `<div class="table-scroll"><table><thead><tr><th>周次</th><th>论文</th><th>报告学生</th><th>提问学生</th></tr></thead><tbody>${rows.map(function historyRow(row) {
-      return `<tr><td>第 ${row.week} 周</td><td><strong>${escapeHtml(row.paper)}</strong></td><td><span class="presenter-tag ${row.presenter ? "" : "muted"}">${row.presenter ? escapeHtml(row.presenter) : "旧版未分配"}</span></td><td><div class="name-tags">${row.names.map(function nameTag(name) { return `<span>${escapeHtml(name)}</span>`; }).join("")}</div></td></tr>`;
+      return `<tr><td>${escapeHtml(row.weekLabel || "第 " + row.week + " 周")}</td><td><strong>${escapeHtml(row.paper)}</strong></td><td><span class="presenter-tag ${row.presenter ? "" : "muted"}">${row.presenter ? escapeHtml(row.presenter) : "旧版未分配"}</span></td><td><div class="name-tags">${row.names.map(function nameTag(name) { return `<span>${escapeHtml(name)}</span>`; }).join("")}</div></td></tr>`;
     }).join("")}</tbody></table></div>`;
   }
 
@@ -704,7 +801,7 @@
       return '<div class="empty-archive-results">尚未揭晓论文，因此没有可显示的学生结果。</div>';
     }
     return `<div class="table-scroll archive-table"><table><thead><tr><th>周次</th><th>论文</th><th>报告学生</th><th>提问学生</th></tr></thead><tbody>${rows.map(function archiveRow(row) {
-      return `<tr><td>第 ${row.week} 周</td><td><strong>${escapeHtml(row.paper)}</strong></td><td><span class="presenter-tag ${row.presenter ? "" : "muted"}">${row.presenter ? escapeHtml(row.presenter) : "旧版未分配"}</span></td><td><div class="name-tags">${row.names.map(function archiveName(name) {
+      return `<tr><td>${escapeHtml(row.weekLabel || "第 " + row.week + " 周")}</td><td><strong>${escapeHtml(row.paper)}</strong></td><td><span class="presenter-tag ${row.presenter ? "" : "muted"}">${row.presenter ? escapeHtml(row.presenter) : "旧版未分配"}</span></td><td><div class="name-tags">${row.names.map(function archiveName(name) {
         return `<span>${escapeHtml(name)}</span>`;
       }).join("")}</div></td></tr>`;
     }).join("")}</tbody></table></div>`;
@@ -725,6 +822,8 @@
 
     elements.archiveList.innerHTML = archives.map(function archiveCard(session) {
       const rows = History.getVisibleRows(session.schedule);
+      const archivedCourse = Course.parseCourseInput(session.paperText);
+      const cancelledCount = archivedCourse.errors.length ? 0 : archivedCourse.excludedRows.length;
       const totalPapers = session.schedule.students.length;
       const revealedPapers = rows.length;
       const isCurrent = Boolean(state.schedule && state.sessionId === session.id);
@@ -732,8 +831,11 @@
       const operations = session.operations.slice().reverse();
       const statusClass = complete ? "success" : isCurrent ? "current" : "neutral";
       const statusText = complete ? "✓ 已完成" : isCurrent ? "● 当前进度" : "可恢复";
+      const protocolVersion = session.schedule.audit && session.schedule.audit.protocolId === "paper-question-picker/v6"
+        ? "v6（可变周次）"
+        : scheduleHasPresenters(session.schedule) ? "v5（含报告人）" : "v4（仅提问人）";
       const auditLabel = hasAuditMetadata(session.schedule)
-        ? (scheduleHasPresenters(session.schedule) ? "v5（含报告人） · " : "v4（仅提问人） · ") +
+        ? protocolVersion + " · " +
           "承诺 " + escapeHtml(session.schedule.audit.commitment.slice(0, 12)) + "…" +
           (session.schedule.audit.commitmentConfirmedAt ? " · 已自确认公开" : " · 尚未确认公开")
         : "旧版记录 · 不支持重放验证";
@@ -742,7 +844,7 @@
           <div class="archive-mark" aria-hidden="true">${complete ? "✓" : "↶"}</div>
           <div class="archive-summary">
             <strong>${escapeHtml(formatArchiveTime(session.createdAt, false))} 的抽签</strong>
-            <p>${totalPapers} 名学生 · ${totalPapers} 篇论文 · 已揭晓 ${revealedPapers}/${totalPapers} 篇</p>
+            <p>${totalPapers} 名学生 · ${totalPapers} 篇有效论文 · ${session.schedule.weeks.length} 周 · 已揭晓 ${revealedPapers}/${totalPapers} 篇${cancelledCount ? " · 另存 " + cancelledCount + " 篇取消标记" : ""}</p>
             <span>最后操作：${escapeHtml(formatArchiveTime(session.updatedAt, true))}</span>
             <span>${auditLabel}</span>
           </div>
@@ -827,9 +929,12 @@
     }
 
     elements.commitmentCode.textContent = audit.commitment;
+    const protocolLabel = audit.protocolId === "paper-question-picker/v6"
+      ? "v6 分周提问+报告协议"
+      : scheduleHasPresenters(state.schedule) ? "v5 提问+报告协议" : "v4 仅提问协议";
     elements.commitmentInputSummary.textContent = state.schedule.students.length + " 名学生 · " +
-      state.schedule.students.length + " 篇论文 · " +
-      (scheduleHasPresenters(state.schedule) ? "v5 提问+报告协议" : "v4 仅提问协议") +
+      state.schedule.students.length + " 篇有效论文 · " + state.schedule.weeks.length + " 周 · " +
+      protocolLabel +
       " · 输入摘要 " + audit.inputDigest;
     elements.copyCommitmentButton.hidden = false;
     elements.exportCommitmentButton.hidden = false;
@@ -868,7 +973,7 @@
     if (result.errors.length || state.revealing || state.generating || state.importing) return;
     if (state.storageWriteBlocked || state.historyWriteBlocked) {
       if (!window.confirm(
-        "检测到无法读取的旧进度或历史。继续生成会先把原始数据另存为隔离副本，再创建新的 v5 进度。\n\n确定继续吗？",
+        "检测到无法读取的旧进度或历史。继续生成会先把原始数据另存为隔离副本，再创建新的 v6 进度。\n\n确定继续吗？",
       )) return;
       if (!preserveUnreadableCurrent() || !preserveUnreadableHistory()) return;
     }
@@ -876,6 +981,7 @@
     elements.generateButton.disabled = true;
     elements.studentsInput.disabled = true;
     elements.papersInput.disabled = true;
+    elements.courseButton.disabled = true;
     elements.exampleButton.disabled = true;
     elements.clearButton.disabled = true;
     elements.generateButton.innerHTML = '<span class="pulse" aria-hidden="true">✦</span> 正在分配角色…';
@@ -883,8 +989,7 @@
     state.timer = window.setTimeout(function finishGenerate() {
       try {
         elements.studentsInput.value = result.students.join("\n");
-        elements.papersInput.value = result.papers.join("\n");
-        state.schedule = Audit.createAuditedSchedule(result.students, result.papers);
+        state.schedule = Audit.createAuditedSchedule(result.students, result.courseWeeks);
         state.activeWeek = 0;
         state.sessionId = null;
         const savedToHistory = recordHistory("generate", "生成完整提问人与报告人安排");
@@ -895,6 +1000,7 @@
         setStatus(error instanceof Error ? error.message : "生成失败，请检查输入。");
       }
       elements.generateButton.innerHTML = '<span aria-hidden="true">⚄</span> 生成完整抽签';
+      elements.courseButton.disabled = false;
       elements.exampleButton.disabled = false;
       elements.clearButton.disabled = false;
       state.generating = false;
@@ -954,21 +1060,21 @@
     }
     const pending = week.revealed.map(function pendingIndex(value, index) { return value ? -1 : index; }).filter(function valid(index) { return index >= 0; });
     const hasPresenters = scheduleHasPresenters(state.schedule);
+    const weekLabel = weekLabelFor(week, state.activeWeek);
     state.revealing = "all";
-    setStatus("正在揭晓第 " + (state.activeWeek + 1) + " 周剩余结果…");
+    setStatus("正在揭晓“" + weekLabel + "”剩余结果…");
     renderStage();
     state.timer = window.setTimeout(function finishWeek() {
       updateRevealed(pending);
       state.revealing = null;
       state.timer = null;
-      const weekNumber = state.activeWeek + 1;
       const savedToHistory = recordHistory(
         "reveal-week",
-        "批量揭晓第 " + weekNumber + " 周剩余 " + pending.length + " 篇论文",
+        "批量揭晓“" + weekLabel + "”剩余 " + pending.length + " 篇论文",
       );
       setStatus(savedToHistory
-        ? "第 " + weekNumber + " 周的" + (hasPresenters ? "报告人与提问人" : "提问人") + "已全部揭晓并记录。"
-        : "第 " + weekNumber + " 周已全部揭晓；当前进度已保留，但历史记录写入失败。");
+        ? "“" + weekLabel + "”的" + (hasPresenters ? "报告人与提问人" : "提问人") + "已全部揭晓并记录。"
+        : "“" + weekLabel + "”已全部揭晓；当前进度已保留，但历史记录写入失败。");
       renderAll();
       saveState();
     }, 900);
@@ -994,8 +1100,8 @@
   function loadExample() {
     if (state.importing || state.generating) return;
     elements.studentsInput.value = EXAMPLE_STUDENTS;
-    elements.papersInput.value = EXAMPLE_PAPERS;
-    setStatus("已载入 12 人、12 篇论文的示例。");
+    elements.papersInput.value = EXAMPLE_COURSE;
+    setStatus("已载入 12 人、4 周共 12 篇论文的匿名示例。");
     renderAll();
   }
 
@@ -1018,7 +1124,7 @@
     const rows = getVisibleRows();
     if (!rows.length) return;
     const text = rows.map(function textRow(row) {
-      return "第 " + row.week + " 周｜" + row.paper + "｜报告人：" +
+      return (row.weekLabel || "第 " + row.week + " 周") + "｜" + row.paper + "｜报告人：" +
         (row.presenter || "旧版未分配") + "｜提问人：" + row.names.join("、");
     }).join("\n");
     try {
@@ -1032,9 +1138,9 @@
   function exportRowsCsv(rows, filename) {
     if (!rows.length) return;
     const data = [
-      ["周次", "论文", "报告学生", "提问学生 1", "提问学生 2", "提问学生 3"],
+      ["周序号", "周次/日期", "论文", "报告学生", "提问学生 1", "提问学生 2", "提问学生 3"],
     ].concat(rows.map(function csvRow(row) {
-      return ["第 " + row.week + " 周", row.paper, row.presenter || ""].concat(row.names);
+      return [row.week, row.weekLabel || "第 " + row.week + " 周", row.paper, row.presenter || ""].concat(row.names);
     }));
     const csv = data.map(function formatRow(row) { return row.map(quoteCsv).join(","); }).join("\r\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -1095,7 +1201,9 @@
       "协议：" + receipt.protocolId,
       "随机算法：" + receipt.rngId,
       "排程算法：" + receipt.scheduleId,
-      "规模：" + receipt.studentCount + " 名学生 / " + receipt.paperCount + " 篇论文 / " + (receipt.paperCount / 3) + " 周",
+      "规模：" + receipt.studentCount + " 名学生 / " + receipt.paperCount + " 篇有效论文 / " +
+        (receipt.weekCount || receipt.paperCount / 3) + " 周" +
+        (Array.isArray(receipt.weekPaperCounts) ? "（" + receipt.weekPaperCounts.join("、") + " 篇）" : ""),
       receipt.version >= 5
         ? "规则：每篇 1 位报告人 + 3 位提问人；每人恰好报告 1 篇、提问 3 次；同篇两种角色不重复。"
         : "规则：v4 旧协议仅分配提问人，不包含报告人。",
@@ -1243,9 +1351,11 @@
     return {
       current: localStorage.getItem(STORAGE_KEY),
       previousCurrent: localStorage.getItem(PREVIOUS_STORAGE_KEY),
+      v4Current: localStorage.getItem(V4_STORAGE_KEY),
       legacyCurrent: localStorage.getItem(LEGACY_STORAGE_KEY),
       history: localStorage.getItem(HISTORY_STORAGE_KEY),
       previousHistory: localStorage.getItem(PREVIOUS_HISTORY_STORAGE_KEY),
+      v4History: localStorage.getItem(V4_HISTORY_STORAGE_KEY),
       legacyHistory: localStorage.getItem(LEGACY_HISTORY_STORAGE_KEY),
     };
   }
@@ -1253,9 +1363,11 @@
   function importStorageRevisionMatches(revision) {
     return localStorage.getItem(STORAGE_KEY) === revision.current &&
       localStorage.getItem(PREVIOUS_STORAGE_KEY) === revision.previousCurrent &&
+      localStorage.getItem(V4_STORAGE_KEY) === revision.v4Current &&
       localStorage.getItem(LEGACY_STORAGE_KEY) === revision.legacyCurrent &&
       localStorage.getItem(HISTORY_STORAGE_KEY) === revision.history &&
       localStorage.getItem(PREVIOUS_HISTORY_STORAGE_KEY) === revision.previousHistory &&
+      localStorage.getItem(V4_HISTORY_STORAGE_KEY) === revision.v4History &&
       localStorage.getItem(LEGACY_HISTORY_STORAGE_KEY) === revision.legacyHistory;
   }
 
@@ -1283,7 +1395,7 @@
       }));
       wroteHistory = true;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({
-        appVersion: 5,
+        appVersion: 6,
         scheduleKind: scheduleKindForSchedule(nextCurrent.schedule),
       }, nextCurrent)));
       wroteCurrent = true;
@@ -1634,6 +1746,7 @@
 
   window.addEventListener("storage", function syncHistoryAcrossTabs(event) {
     if (event.key !== HISTORY_STORAGE_KEY && event.key !== PREVIOUS_HISTORY_STORAGE_KEY &&
+        event.key !== V4_HISTORY_STORAGE_KEY &&
         event.key !== LEGACY_HISTORY_STORAGE_KEY) return;
     try {
       const stored = readArchivesFromStorage();

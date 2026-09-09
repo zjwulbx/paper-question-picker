@@ -117,7 +117,7 @@
     return counts;
   }
 
-  function verifySchedule(candidate) {
+  function verifyScheduleLegacy(candidate) {
     if (!candidate || typeof candidate !== "object") return false;
     const students = candidate.students;
     const weeks = candidate.weeks;
@@ -181,6 +181,64 @@
 
     if (!Object.values(totals).every(function exactlyThree(count) { return count === 3; })) return false;
     return !presenterMode || (presenterIds.length === students.length && new Set(presenterIds).size === students.length);
+  }
+
+  function verifyScheduleV6(candidate) {
+    if (!candidate || typeof candidate !== "object") return false;
+    const students = candidate.students;
+    const weeks = candidate.weeks;
+    if (!Array.isArray(students) || students.length < 9 || !Array.isArray(weeks) || !weeks.length ||
+        typeof candidate.createdAt !== "string") return false;
+
+    const studentIds = new Set();
+    for (const student of students) {
+      if (!student || typeof student.id !== "string" || !student.id || typeof student.name !== "string" || !student.name.trim() ||
+          studentIds.has(student.id)) return false;
+      studentIds.add(student.id);
+    }
+
+    const totals = Object.fromEntries(students.map(function initialCount(student) { return [student.id, 0]; }));
+    const presenterIds = [];
+    const paperNames = new Set();
+    const weekIds = new Set();
+    let paperCount = 0;
+    for (const week of weeks) {
+      if (!week || typeof week.id !== "string" || !week.id || weekIds.has(week.id) ||
+          typeof week.label !== "string" || !week.label.trim() ||
+          !Array.isArray(week.assignments) || (week.assignments.length !== 3 && week.assignments.length !== 4) ||
+          !Array.isArray(week.revealed) || week.revealed.length !== week.assignments.length ||
+          week.revealed.some(function invalidReveal(value) { return typeof value !== "boolean"; })) return false;
+      weekIds.add(week.id);
+      const weeklyIds = [];
+      for (const assignment of week.assignments) {
+        if (!assignment || typeof assignment.paper !== "string" || !assignment.paper.trim() || paperNames.has(assignment.paper) ||
+            !Array.isArray(assignment.studentIds) || assignment.studentIds.length !== 3 ||
+            typeof assignment.presenterId !== "string" || !studentIds.has(assignment.presenterId) ||
+            assignment.studentIds.includes(assignment.presenterId)) return false;
+        paperNames.add(assignment.paper);
+        paperCount += 1;
+        for (const studentId of assignment.studentIds) {
+          if (typeof studentId !== "string" || !Object.hasOwn(totals, studentId)) return false;
+          weeklyIds.push(studentId);
+          totals[studentId] += 1;
+        }
+        presenterIds.push(assignment.presenterId);
+      }
+      if (weeklyIds.length !== week.assignments.length * 3 || new Set(weeklyIds).size !== weeklyIds.length) return false;
+    }
+
+    return paperCount === students.length && Object.values(totals).every(function exactlyThree(count) { return count === 3; }) &&
+      presenterIds.length === students.length && new Set(presenterIds).size === students.length;
+  }
+
+  function verifySchedule(candidate) {
+    const hasV6Shape = Boolean(candidate && Array.isArray(candidate.weeks) && candidate.weeks.length &&
+      candidate.weeks.every(function labeledWeek(week) {
+        return week && typeof week.label === "string" && week.label.trim();
+      }));
+    return (candidate && candidate.audit && candidate.audit.protocolId === "paper-question-picker/v6") || hasV6Shape
+      ? verifyScheduleV6(candidate)
+      : verifyScheduleLegacy(candidate);
   }
 
   return {

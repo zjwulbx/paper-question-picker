@@ -264,132 +264,82 @@
       students: ownValue(report, "students"),
       papers: ownValue(report, "papers"),
     };
-    const schedule = ownValue(report, "schedule");
     const plan = ownValue(report, "plan");
     const students = input && Array.isArray(input.students) ? input.students : null;
-    const papers = input && Array.isArray(input.papers) ? input.papers : null;
-    const scheduleStudents = schedule && Array.isArray(schedule.students) ? schedule.students : null;
-    const weeks = schedule && Array.isArray(schedule.weeks) ? schedule.weeks : null;
+    const courseWeeks = Array.isArray(ownValue(report, "courseWeeks")) ? report.courseWeeks : null;
+    const papers = input && Array.isArray(input.papers)
+      ? input.papers
+      : courseWeeks ? courseWeeks.flatMap(function paperList(week) { return Array.isArray(week.papers) ? week.papers : []; }) : null;
     const planWeeks = plan && Array.isArray(plan.weeks) ? plan.weeks : null;
-    if (students && papers && planWeeks) {
-      const totals = new Array(students.length).fill(0);
-      const presentationTotals = new Array(students.length).fill(0);
-      let weeklyShape = true;
-      let presenterShape = true;
-      let presenterMode = null;
-      let paperSlots = 0;
-      planWeeks.forEach(function inspectPlanWeek(week, weekIndex) {
-        if (!week || week.weekIndex !== weekIndex || !Array.isArray(week.assignments) || week.assignments.length !== 3) {
-          weeklyShape = false;
-          return;
-        }
-        const weeklyIndexes = [];
-        week.assignments.forEach(function inspectPlanAssignment(assignment, paperOffset) {
-          paperSlots += 1;
-          if (!assignment || assignment.paperIndex !== weekIndex * 3 + paperOffset ||
-              !Array.isArray(assignment.studentIndexes) || assignment.studentIndexes.length !== 3) {
-            weeklyShape = false;
-            return;
-          }
-          assignment.studentIndexes.forEach(function countStudent(index) {
-            weeklyIndexes.push(index);
-            if (!Number.isInteger(index) || index < 0 || index >= students.length) weeklyShape = false;
-            else totals[index] += 1;
-          });
-          const hasPresenter = Object.prototype.hasOwnProperty.call(assignment, "presenterIndex");
-          if (presenterMode === null) presenterMode = hasPresenter;
-          if (presenterMode !== hasPresenter) presenterShape = false;
-          if (hasPresenter) {
-            const presenterIndex = assignment.presenterIndex;
-            if (!Number.isInteger(presenterIndex) || presenterIndex < 0 || presenterIndex >= students.length ||
-                assignment.studentIndexes.includes(presenterIndex)) {
-              presenterShape = false;
-            } else {
-              presentationTotals[presenterIndex] += 1;
-            }
-          }
-        });
-        if (weeklyIndexes.length !== 9 || new Set(weeklyIndexes).size !== 9) weeklyShape = false;
-      });
-      const countShape = students.length === papers.length && students.length >= 9 &&
-        students.length % 3 === 0 && planWeeks.length === students.length / 3 && paperSlots === papers.length;
-      const checks = [
-        normalizedCheck("学生数与论文数相等，且人数符合规则", countShape),
-        normalizedCheck("每周 3 篇、每篇 3 位提问人、同周 9 位提问人不重复", weeklyShape),
-        normalizedCheck("每位学生在完整安排中恰好提问 3 次", totals.every(function three(count) { return count === 3; })),
-      ];
-      if (presenterMode || !presenterShape) {
-        checks.push(
-          normalizedCheck("每篇论文恰好有 1 位报告人，且不是本篇提问人", presenterShape),
-          normalizedCheck("每位学生在完整安排中恰好报告 1 篇",
-            presenterShape && presentationTotals.every(function one(count) { return count === 1; })),
-        );
-      }
-      return checks;
-    }
-    if (!students || !papers || !scheduleStudents || !weeks) return [];
+    if (!students || !papers || !planWeeks) return [];
 
-    const studentIds = scheduleStudents.map(function studentId(student) {
-      return student && typeof student.id === "string" ? student.id : null;
-    });
-    const knownIds = new Set(studentIds.filter(Boolean));
-    const totals = new Map(studentIds.filter(Boolean).map(function zero(id) { return [id, 0]; }));
-    const presentationTotals = new Map(studentIds.filter(Boolean).map(function zeroPresentation(id) { return [id, 0]; }));
+    const receipt = ownValue(report, "receipt") || {};
+    const isV6 = ownValue(report, "version") === 6;
+    const expectedWeekSizes = isV6 && Array.isArray(receipt.weekPaperCounts)
+      ? receipt.weekPaperCounts.slice()
+      : new Array(planWeeks.length).fill(3);
+    const totals = new Array(students.length).fill(0);
+    const presentationTotals = new Array(students.length).fill(0);
     let paperSlots = 0;
+    let paperCursor = 0;
     let weeklyShape = true;
     let presenterShape = true;
     let presenterMode = null;
 
-    weeks.forEach(function inspectWeek(week) {
-      if (!week || !Array.isArray(week.assignments) || week.assignments.length !== 3) {
+    planWeeks.forEach(function inspectWeek(week, weekIndex) {
+      const weekSize = expectedWeekSizes[weekIndex];
+      if (!week || week.weekIndex !== weekIndex || (weekSize !== 3 && weekSize !== 4) ||
+          !Array.isArray(week.assignments) || week.assignments.length !== weekSize) {
         weeklyShape = false;
         return;
       }
-      const weeklyIds = [];
-      week.assignments.forEach(function inspectAssignment(assignment) {
+      const weeklyIndexes = [];
+      week.assignments.forEach(function inspectAssignment(assignment, paperOffset) {
         paperSlots += 1;
-        if (!assignment || !Array.isArray(assignment.studentIds) || assignment.studentIds.length !== 3) {
+        if (!assignment || assignment.paperIndex !== paperCursor + paperOffset ||
+            !Array.isArray(assignment.studentIndexes) || assignment.studentIndexes.length !== 3) {
           weeklyShape = false;
           return;
         }
-        assignment.studentIds.forEach(function countId(id) {
-          weeklyIds.push(id);
-          if (!knownIds.has(id)) {
-            weeklyShape = false;
-          } else {
-            totals.set(id, totals.get(id) + 1);
-          }
+        assignment.studentIndexes.forEach(function countIndex(index) {
+          weeklyIndexes.push(index);
+          if (!Number.isInteger(index) || index < 0 || index >= students.length) weeklyShape = false;
+          else totals[index] += 1;
         });
-        const hasPresenter = Object.prototype.hasOwnProperty.call(assignment, "presenterId");
+        const hasPresenter = Object.prototype.hasOwnProperty.call(assignment, "presenterIndex");
         if (presenterMode === null) presenterMode = hasPresenter;
         if (presenterMode !== hasPresenter) presenterShape = false;
         if (hasPresenter) {
-          if (!knownIds.has(assignment.presenterId) || assignment.studentIds.includes(assignment.presenterId)) {
+          if (!Number.isInteger(assignment.presenterIndex) || assignment.presenterIndex < 0 ||
+              assignment.presenterIndex >= students.length || assignment.studentIndexes.includes(assignment.presenterIndex)) {
             presenterShape = false;
           } else {
-            presentationTotals.set(assignment.presenterId, presentationTotals.get(assignment.presenterId) + 1);
+            presentationTotals[assignment.presenterIndex] += 1;
           }
         }
       });
-      if (weeklyIds.length !== 9 || new Set(weeklyIds).size !== 9) weeklyShape = false;
+      if (weeklyIndexes.length !== weekSize * 3 || new Set(weeklyIndexes).size !== weekSize * 3) weeklyShape = false;
+      paperCursor += weekSize;
     });
 
     const countShape = students.length === papers.length && students.length >= 9 &&
-      students.length % 3 === 0 && scheduleStudents.length === students.length &&
-      weeks.length === students.length / 3 && paperSlots === papers.length;
-    const exactlyThree = totals.size === students.length &&
-      Array.from(totals.values()).every(function three(count) { return count === 3; });
+      expectedWeekSizes.length === planWeeks.length && paperSlots === papers.length &&
+      expectedWeekSizes.reduce(function sum(total, size) { return total + size; }, 0) === papers.length &&
+      (!isV6 ? students.length % 3 === 0 : Math.max.apply(null, expectedWeekSizes) * 3 <= students.length);
 
     const checks = [
       normalizedCheck("学生数与论文数相等，且人数符合规则", countShape),
-      normalizedCheck("每周 3 篇、每篇 3 位提问人、同周 9 位提问人不重复", weeklyShape),
-      normalizedCheck("每位学生在完整安排中恰好提问 3 次", exactlyThree),
+      normalizedCheck(isV6
+        ? "每周 3 或 4 篇、每篇 3 位提问人、同周提问人不重复"
+        : "每周 3 篇、每篇 3 位提问人、同周 9 位提问人不重复", weeklyShape),
+      normalizedCheck("每位学生在完整安排中恰好提问 3 次",
+        totals.every(function three(count) { return count === 3; })),
     ];
     if (presenterMode || !presenterShape) {
       checks.push(
         normalizedCheck("每篇论文恰好有 1 位报告人，且不是本篇提问人", presenterShape),
         normalizedCheck("每位学生在完整安排中恰好报告 1 篇",
-          presenterShape && Array.from(presentationTotals.values()).every(function one(count) { return count === 1; })),
+          presenterShape && presentationTotals.every(function one(count) { return count === 1; })),
       );
     }
     return checks;
@@ -421,7 +371,10 @@
 
   function appendReplayDetails(container, outcome, report) {
     const students = Array.isArray(report.students) ? report.students : [];
-    const papers = Array.isArray(report.papers) ? report.papers : [];
+    const courseWeeks = Array.isArray(report.courseWeeks) ? report.courseWeeks : null;
+    const papers = Array.isArray(report.papers)
+      ? report.papers
+      : courseWeeks ? courseWeeks.flatMap(function weekPapers(week) { return Array.isArray(week.papers) ? week.papers : []; }) : [];
     const replayedPlan = ownValue(outcome, "replayedPlan");
     const plan = replayedPlan && Array.isArray(replayedPlan.weeks)
       ? replayedPlan
@@ -449,7 +402,10 @@
       });
       lines.push("", "规范化论文与重放安排");
       plan.weeks.forEach(function weekLines(week, weekIndex) {
-        lines.push("", "第 " + (weekIndex + 1) + " 周");
+        const label = courseWeeks && courseWeeks[weekIndex] && typeof courseWeeks[weekIndex].label === "string"
+          ? courseWeeks[weekIndex].label
+          : "第 " + (weekIndex + 1) + " 周";
+        lines.push("", label);
         week.assignments.forEach(function assignmentLine(assignment) {
           const paperIndex = assignment.paperIndex;
           const selected = assignment.studentIndexes.map(function selectedStudent(studentIndex) {
@@ -504,7 +460,10 @@
     };
     const schedule = ownValue(report, "schedule") || {};
     const students = Array.isArray(input.students) ? input.students : [];
-    const papers = Array.isArray(input.papers) ? input.papers : [];
+    const courseWeeks = Array.isArray(ownValue(report, "courseWeeks")) ? report.courseWeeks : [];
+    const papers = Array.isArray(input.papers)
+      ? input.papers
+      : courseWeeks.flatMap(function paperList(week) { return Array.isArray(week.papers) ? week.papers : []; });
     const reportPlan = ownValue(report, "plan") || {};
     const weeks = Array.isArray(schedule.weeks)
       ? schedule.weeks
@@ -564,7 +523,7 @@
     appendParagraph(
       elements.result,
       "输入：" + students.length + " 名学生、" + papers.length +
-        " 篇论文；计划：" + weeks.length + " 周。",
+        " 篇有效论文；计划：" + weeks.length + " 周。",
     );
     appendChecks(elements.result, checks);
     appendReplayDetails(elements.result, outcome, report);
