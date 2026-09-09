@@ -742,7 +742,7 @@ function privateInputDefaultsChecks() {
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const readmeSource = fs.readFileSync(path.join(root, "README.md"), "utf8");
-  check(!/CoursePreset|DEFAULT_COURSE|course-button|loadCoursePreset/.test(appSource + "\n" + indexSource),
+  check(!/CoursePreset|DEFAULT_COURSE|courseButton|course-button|loadCoursePreset/.test(appSource + "\n" + indexSource),
     "public app still references a semester course preset");
   check(!/course-preset\.js|载入本学期论文/.test(indexSource),
     "public page still offers the private semester preset");
@@ -843,6 +843,18 @@ function staticSiteChecks() {
   }
   assertIdsExist(appJs, indexHtml, "app.js");
   assertIdsExist(verifyJs, verifyHtml, "verify.js");
+
+  const elementMap = appJs.match(/const elements = \{([\s\S]*?)\n  \};/);
+  check(Boolean(elementMap), "app.js element map is missing");
+  const declaredElements = new Set(Array.from(elementMap[1].matchAll(/^\s{4}([A-Za-z_$][\w$]*):/gm), function name(match) {
+    return match[1];
+  }));
+  const usedElements = new Set(Array.from(appJs.matchAll(/\belements\.([A-Za-z_$][\w$]*)/g), function name(match) {
+    return match[1];
+  }));
+  usedElements.forEach(function declared(name) {
+    check(declaredElements.has(name), "app.js uses undeclared elements." + name);
+  });
 
   [indexHtml, verifyHtml, algorithmHtml].forEach(function localAssets(html) {
     for (const match of html.matchAll(/(?:src|href)=["']([^"'#?]+)(?:\?[^"']*)?["']/g)) {

@@ -981,7 +981,6 @@
     elements.generateButton.disabled = true;
     elements.studentsInput.disabled = true;
     elements.papersInput.disabled = true;
-    elements.courseButton.disabled = true;
     elements.exampleButton.disabled = true;
     elements.clearButton.disabled = true;
     elements.generateButton.innerHTML = '<span class="pulse" aria-hidden="true">✦</span> 正在分配角色…';
@@ -1000,7 +999,6 @@
         setStatus(error instanceof Error ? error.message : "生成失败，请检查输入。");
       }
       elements.generateButton.innerHTML = '<span aria-hidden="true">⚄</span> 生成完整抽签';
-      elements.courseButton.disabled = false;
       elements.exampleButton.disabled = false;
       elements.clearButton.disabled = false;
       state.generating = false;
